@@ -1915,3 +1915,26 @@ ${!Store.getApiKey() ? `> [!TIP]
   }
 
 })(typeof window !== "undefined" ? window : globalThis);
+
+  function launchInteractiveDemo() {
+    const input = document.getElementById("chatInput");
+    const demoPrompt = "/plan Architect autonomous AI agent with 24 MCP plugins, subagents fleet, and background automations";
+
+    // Close any open settings modal
+    try {
+      const modal = document.getElementById("settingsModal");
+      if (modal && modal.open) modal.close();
+    } catch (e) {}
+
+    showToast("Launching interactive agent demo simulation...", "info");
+
+    if (input) {
+      input.value = demoPrompt;
+      setTimeout(() => {
+        handleSendMessage();
+      }, 150);
+    }
+  }
+
+  document.getElementById("interactiveDemoBtn")?.addEventListener("click", launchInteractiveDemo);
+  document.getElementById("runDemoModeBtn")?.addEventListener("click", launchInteractiveDemo);
