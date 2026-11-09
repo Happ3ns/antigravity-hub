@@ -1,4 +1,4 @@
-// ── Antigravity Studio 2026 Core App & Streaming Engine ──
+// ── Antigravity Studio 2026 Core App, Navigation, Automations & Customizations ──
 (function (root) {
   "use strict";
 
@@ -6,19 +6,340 @@
 
   let currentPinInput = "";
   let activeSession = null;
+  const navHistory = [];
+  let navHistoryIndex = -1;
+  const inputUndoStack = [];
 
   document.addEventListener("DOMContentLoaded", () => {
     initAmbientBackground();
     checkPinGate();
     initSettingsModal();
     initModelModal();
+    initAutomationsModal();
+    initCustomizationsModal();
+    initTransparentKeyboard();
     initSidebarControls();
+    initNavigationHistory();
     initArtifactsControls();
     initChatControls();
+    applyThemeCustomizations();
     loadSessions();
   });
 
-  // 1. PIN Security Lock Logic
+  // 1. Navigation History (Back & Forward)
+  function initNavigationHistory() {
+    const backBtn = document.getElementById("navBackBtn");
+    const forwardBtn = document.getElementById("navForwardBtn");
+
+    backBtn?.addEventListener("click", () => {
+      if (navHistoryIndex > 0) {
+        navHistoryIndex--;
+        const sessionId = navHistory[navHistoryIndex];
+        switchSession(sessionId, false);
+        updateNavButtons();
+      }
+    });
+
+    forwardBtn?.addEventListener("click", () => {
+      if (navHistoryIndex < navHistory.length - 1) {
+        navHistoryIndex++;
+        const sessionId = navHistory[navHistoryIndex];
+        switchSession(sessionId, false);
+        updateNavButtons();
+      }
+    });
+  }
+
+  function recordNavHistory(sessionId) {
+    if (!sessionId) return;
+    if (navHistoryIndex >= 0 && navHistory[navHistoryIndex] === sessionId) return;
+
+    // Cut forward branch if navigating anew
+    navHistory.splice(navHistoryIndex + 1);
+    navHistory.push(sessionId);
+    navHistoryIndex = navHistory.length - 1;
+    updateNavButtons();
+  }
+
+  function updateNavButtons() {
+    const backBtn = document.getElementById("navBackBtn");
+    const forwardBtn = document.getElementById("navForwardBtn");
+    if (backBtn) backBtn.disabled = navHistoryIndex <= 0;
+    if (forwardBtn) forwardBtn.disabled = navHistoryIndex >= navHistory.length - 1;
+  }
+
+  // 2. Transparent Built-in iPad Keyboard & Accessory Bar
+  function initTransparentKeyboard() {
+    const kb = document.getElementById("ipadKeyboard");
+    const input = document.getElementById("promptInput");
+    const expandBtn = document.getElementById("kbExpandBtn");
+    const expandedPad = document.getElementById("keyboardExpandedPad");
+    const undoBtn = document.getElementById("kbUndoBtn");
+    const toggleVisibilityBtn = document.getElementById("toggleKbVisibilityBtn");
+
+    // Apply saved transparency
+    applyKeyboardTransparency(Store.getKeyboardTransparency());
+
+    // Toggle expand
+    expandBtn?.addEventListener("click", () => {
+      expandedPad?.classList.toggle("hidden");
+      expandBtn.textContent = expandedPad?.classList.contains("hidden") ? "⌨️ Math" : "✕ Close";
+    });
+
+    // Toggle keyboard visibility
+    toggleVisibilityBtn?.addEventListener("click", () => {
+      kb?.classList.toggle("hidden");
+      toggleVisibilityBtn.classList.toggle("active");
+    });
+
+    // Undo button
+    undoBtn?.addEventListener("click", () => {
+      if (inputUndoStack.length > 0) {
+        input.value = inputUndoStack.pop();
+        input.focus();
+      }
+    });
+
+    // Key insertion logic
+    kb?.addEventListener("click", (e) => {
+      const keyBtn = e.target.closest(".kb-key");
+      if (!keyBtn || keyBtn.id === "kbUndoBtn" || keyBtn.id === "kbExpandBtn") return;
+
+      const toInsert = keyBtn.getAttribute("data-insert");
+      if (!toInsert) return;
+
+      inputUndoStack.push(input.value);
+      if (inputUndoStack.length > 20) inputUndoStack.shift();
+
+      const start = input.selectionStart || input.value.length;
+      const end = input.selectionEnd || input.value.length;
+      const val = input.value;
+
+      input.value = val.substring(0, start) + toInsert + val.substring(end);
+
+      // Smart cursor positioning inside brackets
+      let newCursor = start + toInsert.length;
+      if (toInsert === "{}" || toInsert === "[]" || toInsert === "()" || toInsert === "$$") {
+        newCursor = start + 1;
+      } else if (toInsert === "\\frac{}{}") {
+        newCursor = start + 6;
+      } else if (toInsert === "\\sqrt{}" || toInsert === "\\vec{}") {
+        newCursor = start + 6;
+      }
+
+      input.setSelectionRange(newCursor, newCursor);
+      input.focus();
+
+      // Trigger auto-resize
+      input.dispatchEvent(new Event("input"));
+    });
+  }
+
+  function applyKeyboardTransparency(val) {
+    const kb = document.getElementById("ipadKeyboard");
+    if (!kb) return;
+    const opacity = (val / 100).toFixed(2);
+    kb.style.background = `rgba(16, 20, 34, ${opacity})`;
+  }
+
+  // 3. Automations Manager Modal
+  function initAutomationsModal() {
+    const modal = document.getElementById("automationsModal");
+    const openBtn = document.getElementById("automationsBtn");
+    const closeBtn = document.getElementById("closeAutomationsModalBtn");
+    const closeFooterBtn = document.getElementById("closeAutomationsFooterBtn");
+    const newAutoBtn = document.getElementById("newAutomationBtn");
+
+    openBtn?.addEventListener("click", () => {
+      renderAutomationsList();
+      modal?.showModal();
+    });
+
+    const closeModal = () => modal?.close();
+    closeBtn?.addEventListener("click", closeModal);
+    closeFooterBtn?.addEventListener("click", closeModal);
+
+    newAutoBtn?.addEventListener("click", () => {
+      const title = prompt("Enter Automation Title (e.g. Daily Singapore News Brief):");
+      if (!title) return;
+      const schedule = prompt("Enter Schedule (e.g. Every day at 9:00 AM, Every 1 hour):", "Every day at 09:00 AM");
+      const cmd = prompt("Enter Agent Prompt to execute:", "/plan Review admissions milestones.");
+
+      const newAuto = {
+        id: "auto_" + Date.now(),
+        title: title,
+        schedule: schedule || "Every day at 09:00 AM",
+        prompt: cmd || "/plan",
+        status: "active",
+        lastRun: "Never",
+        enabled: true
+      };
+
+      Store.addAutomation(newAuto);
+      renderAutomationsList();
+    });
+  }
+
+  function renderAutomationsList() {
+    const container = document.getElementById("automationsListContainer");
+    if (!container) return;
+    const autos = Store.getAutomations();
+    container.innerHTML = "";
+
+    autos.forEach(auto => {
+      const card = document.createElement("div");
+      card.className = "automation-card";
+      card.innerHTML = `
+        <div class="automation-card-header">
+          <div class="automation-title-wrap">
+            <strong>${auto.title}</strong>
+            <span>${auto.schedule}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button class="btn-primary run-auto-btn" style="padding:4px 10px; font-size:11px;" data-id="${auto.id}">Run ⚡</button>
+            <label class="switch">
+              <input type="checkbox" ${auto.enabled ? "checked" : ""} data-id="${auto.id}" class="auto-toggle-checkbox">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div style="font-size:12px; color:var(--ink-secondary); font-family:var(--font-mono); background:#060810; padding:6px 10px; border-radius:6px;">
+          ${auto.prompt}
+        </div>
+        <div class="automation-meta">
+          <span>Status: <strong style="color:var(--accent-emerald);">${auto.status}</strong></span>
+          <span>Last trigger: ${auto.lastRun}</span>
+        </div>
+      `;
+
+      card.querySelector(".auto-toggle-checkbox")?.addEventListener("change", (e) => {
+        Store.toggleAutomation(auto.id);
+      });
+
+      card.querySelector(".run-auto-btn")?.addEventListener("click", () => {
+        document.getElementById("automationsModal")?.close();
+        const input = document.getElementById("promptInput");
+        input.value = auto.prompt;
+        sendMessage();
+      });
+
+      container.appendChild(card);
+    });
+  }
+
+  // 4. Customizations Studio Modal (Rules, Skills, MCP, Appearance)
+  function initCustomizationsModal() {
+    const modal = document.getElementById("customizationsModal");
+    const openBtn = document.getElementById("customizationsBtn");
+    const sidebarOpenBtn = document.getElementById("sidebarCustomizationsBtn");
+    const closeBtn = document.getElementById("closeCustomizationsModalBtn");
+    const cancelBtn = document.getElementById("cancelCustomizationsBtn");
+    const saveBtn = document.getElementById("saveCustomizationsBtn");
+    const tabs = document.querySelectorAll("#customizationsModal .art-tab");
+    const rulesTextarea = document.getElementById("rulesEditorTextarea");
+    const kbSlider = document.getElementById("kbOpacitySlider");
+    const kbLabel = document.getElementById("kbOpacityLabel");
+
+    const openCustomizations = () => {
+      rulesTextarea.value = Store.getRules();
+      renderSkillsList();
+      kbSlider.value = Store.getKeyboardTransparency();
+      kbLabel.textContent = `Translucency: ${kbSlider.value}% frosted glass blur`;
+      modal?.showModal();
+    };
+
+    openBtn?.addEventListener("click", openCustomizations);
+    sidebarOpenBtn?.addEventListener("click", openCustomizations);
+
+    const closeModal = () => modal?.close();
+    closeBtn?.addEventListener("click", closeModal);
+    cancelBtn?.addEventListener("click", closeModal);
+
+    // Tab switcher
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const target = tab.getAttribute("data-cust-tab");
+
+        document.querySelectorAll(".cust-tab-panel").forEach(p => p.classList.add("hidden"));
+        if (target === "rules") document.getElementById("custTabRules")?.classList.remove("hidden");
+        else if (target === "skills") document.getElementById("custTabSkills")?.classList.remove("hidden");
+        else if (target === "mcp") document.getElementById("custTabMcp")?.classList.remove("hidden");
+        else if (target === "appearance") document.getElementById("custTabAppearance")?.classList.remove("hidden");
+      });
+    });
+
+    // Keyboard opacity live slider
+    kbSlider?.addEventListener("input", (e) => {
+      const val = e.target.value;
+      kbLabel.textContent = `Translucency: ${val}% frosted glass blur`;
+      applyKeyboardTransparency(val);
+      Store.setKeyboardTransparency(val);
+    });
+
+    // Theme accent selector buttons
+    document.querySelectorAll(".theme-accent-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const accent = btn.getAttribute("data-accent");
+        Store.setThemeAccent(accent);
+        applyThemeCustomizations();
+      });
+    });
+
+    saveBtn?.addEventListener("click", () => {
+      Store.setRules(rulesTextarea.value);
+      closeModal();
+      alert("Antigravity Customizations & Rules successfully saved!");
+    });
+  }
+
+  function renderSkillsList() {
+    const container = document.getElementById("skillsListContainer");
+    if (!container) return;
+    const skills = Store.getSkills();
+    container.innerHTML = "";
+
+    skills.forEach(skill => {
+      const item = document.createElement("div");
+      item.className = "skill-card-item";
+      item.innerHTML = `
+        <div class="skill-info">
+          <span class="skill-icon-box">${skill.icon}</span>
+          <div>
+            <strong>${skill.name}</strong>
+            <p style="font-size:11px; color:var(--ink-secondary);">${skill.desc}</p>
+          </div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" ${skill.enabled ? "checked" : ""} data-id="${skill.id}" class="skill-toggle-checkbox">
+          <span class="slider"></span>
+        </label>
+      `;
+
+      item.querySelector(".skill-toggle-checkbox")?.addEventListener("change", () => {
+        Store.toggleSkill(skill.id);
+      });
+
+      container.appendChild(item);
+    });
+  }
+
+  function applyThemeCustomizations() {
+    const accent = Store.getThemeAccent();
+    const map = {
+      indigo: { primary: "#6366f1", glow: "rgba(99, 102, 241, 0.4)" },
+      cyan: { primary: "#06b6d4", glow: "rgba(6, 182, 212, 0.4)" },
+      emerald: { primary: "#10b981", glow: "rgba(16, 185, 129, 0.4)" },
+      purple: { primary: "#a855f7", glow: "rgba(168, 85, 247, 0.4)" }
+    };
+    const c = map[accent] || map.indigo;
+    document.documentElement.style.setProperty("--accent-indigo", c.primary);
+    document.documentElement.style.setProperty("--border-focus", c.primary);
+    document.documentElement.style.setProperty("--accent-indigo-glow", c.glow);
+  }
+
+  // 5. PIN Security Lock Logic
   function checkPinGate() {
     const pinOverlay = document.getElementById("pinLockScreen");
     if (Store.isLocked()) {
@@ -71,7 +392,7 @@
     });
   }
 
-  // 2. Sidebar & Navigation
+  // 6. Sidebar & Navigation Controls
   function initSidebarControls() {
     const sidebar = document.getElementById("appSidebar");
     const toggleBtn = document.getElementById("toggleSidebarBtn");
@@ -114,7 +435,7 @@
     });
   }
 
-  // 3. Model & Mode Selector
+  // 7. Model & Mode Selector
   function initModelModal() {
     const modal = document.getElementById("modelSelectModal");
     const pillBtn = document.getElementById("activeModelPill");
@@ -172,7 +493,7 @@
     }
   }
 
-  // 4. Artifacts Split Studio Controls
+  // 8. Artifacts Split Studio Controls
   function initArtifactsControls() {
     const pane = document.getElementById("artifactsPane");
     const toggleBtn = document.getElementById("toggleArtifactsBtn");
@@ -229,7 +550,7 @@
     Render.renderMath(body);
   };
 
-  // 5. Chat Interaction & Real-Time SSE Streaming
+  // 9. Chat Controls & Message Sending
   function initChatControls() {
     const promptInput = document.getElementById("promptInput");
     const sendBtn = document.getElementById("sendBtn");
@@ -238,7 +559,6 @@
     const cotBtn = document.getElementById("cotToggleBtn");
     const chips = document.querySelectorAll(".quick-action-chips .chip-btn");
 
-    // Auto-grow textarea
     promptInput.addEventListener("input", () => {
       promptInput.style.height = "auto";
       promptInput.style.height = Math.min(promptInput.scrollHeight, 140) + "px";
@@ -250,7 +570,6 @@
       }
     });
 
-    // Quick chips
     chips.forEach(chip => {
       chip.addEventListener("click", () => {
         const cmd = chip.getAttribute("data-cmd");
@@ -261,23 +580,29 @@
             renderChatStream();
           }
           return;
+        } else if (cmd === "/automation") {
+          document.getElementById("automationsBtn")?.click();
+          return;
         }
         promptInput.value = cmd + " ";
         promptInput.focus();
       });
     });
 
-    // Slash popover click
     popover?.querySelectorAll(".slash-item").forEach(item => {
       item.addEventListener("click", () => {
         const cmd = item.getAttribute("data-cmd");
+        if (cmd === "/automation") {
+          document.getElementById("automationsBtn")?.click();
+          popover.classList.add("hidden");
+          return;
+        }
         promptInput.value = cmd + " ";
         popover.classList.add("hidden");
         promptInput.focus();
       });
     });
 
-    // Tool Toggles
     webSearchBtn?.addEventListener("click", () => {
       webSearchBtn.classList.toggle("active");
       Store.setWebSearchEnabled(webSearchBtn.classList.contains("active"));
@@ -311,7 +636,6 @@
       createNewSession(text.slice(0, 32));
     }
 
-    // Append user message
     const stream = document.getElementById("chatStream");
     const userMsg = document.createElement("div");
     userMsg.className = "chat-msg user";
@@ -322,24 +646,21 @@
     activeSession.messages.push({ role: "user", content: text, created_at: new Date().toISOString() });
     saveActiveSession();
 
-    // Trigger Stream
     callAgentStream(text);
   }
 
-  // 6. Ultra-Fast Live SSE Streaming & Local Agent Engine
+  // 10. Real-Time Streaming & Local Agent Engine
   async function callAgentStream(prompt) {
     const stream = document.getElementById("chatStream");
     const apiKey = Store.getApiKey();
     const model = Store.getModel();
     const mode = Store.getMode();
 
-    // If no API key configured, use built-in smart agent engine immediately (< 200ms)
     if (!apiKey) {
       handleLocalAgentResponse(prompt);
       return;
     }
 
-    // Prepare Streaming UI Container
     const streamingEl = Render.createStreamingElement(model);
     stream.appendChild(streamingEl.element);
     stream.scrollTop = stream.scrollHeight;
@@ -356,10 +677,18 @@
       }
     });
 
+    // Inject active user rules & skills into system prompt
+    const userRules = Store.getRules();
+    const activeSkills = Store.getSkills().filter(s => s.enabled).map(s => s.name).join(", ");
+
     const systemInstruction = `You are Antigravity, Google DeepMind's Advanced Agentic Coding Assistant.
-Current mode: ${mode.toUpperCase()}.
-Always format responses with ultra-clean GitHub markdown, KaTeX math notation ($$...$$ for block, $...$ for inline), and code blocks with language tags.
-Wrap your internal chain-of-thought in <thinking>...</thinking> tags before producing your final answer.`;
+Mode: ${mode.toUpperCase()}.
+Active Skills: ${activeSkills || "None"}.
+
+${userRules}
+
+Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $...$ inline), and code blocks with language tags.
+Wrap internal chain-of-thought in <thinking>...</thinking> tags before final answer.`;
 
     try {
       const response = await fetch(endpoint, {
@@ -406,7 +735,6 @@ Wrap your internal chain-of-thought in <thinking>...</thinking> tags before prod
               if (chunk) {
                 fullText += chunk;
 
-                // Real-time tag parser for thinking vs body
                 if (fullText.includes("<thinking>")) {
                   inThinking = true;
                   const parts = fullText.split("<thinking>");
@@ -438,7 +766,6 @@ Wrap your internal chain-of-thought in <thinking>...</thinking> tags before prod
 
       streamingEl.finish();
 
-      // Save to session
       activeSession.messages.push({
         role: "assistant",
         content: bodyBuffer || fullText,
@@ -454,18 +781,18 @@ Wrap your internal chain-of-thought in <thinking>...</thinking> tags before prod
     }
   }
 
-  // 7. Instant Local Agent Engine (< 200ms zero-latency fallback)
+  // 11. Instant Local Agent Engine
   function handleLocalAgentResponse(prompt, fallbackErrorReason = "") {
     const stream = document.getElementById("chatStream");
     const lower = prompt.toLowerCase().trim();
 
-    let thinking = "Analyzing user intent and workspace context. Formulating structured agentic response with high-fidelity formatting.";
+    let thinking = "Analyzing intent using custom AGENTS.md rules and active skills (JEE Tutor, Singapore Admissions).";
     let responseText = "";
     let toolCalls = [];
     let artifact = null;
 
     if (lower.startsWith("/plan")) {
-      thinking = "User requested implementation plan. Decomposing architectural requirements, milestone phases, and testing strategies for Singapore admission & JEE quiz stack.";
+      thinking = "Decomposing architectural requirements, milestone phases, and testing strategies.";
       toolCalls.push({
         name: "plan_architect",
         args: { task: prompt.replace("/plan", "").trim() || "Full Stack Application Architecture" }
@@ -477,17 +804,18 @@ Wrap your internal chain-of-thought in <thinking>...</thinking> tags before prod
 #### Phase 1: Core Foundation & State Isolation
 - [x] Configure spatial Obsidian dark theme tokens and iPad responsive shell.
 - [x] Establish PIN-protected local vault with client-side key storage.
-- [ ] Connect live streaming reasoning engine directly to Gemini 2.5 API.
+- [x] Connect live streaming reasoning engine directly to Gemini 2.5 API.
 
 #### Phase 2: Live Tool Calling & Multi-Agent Execution
-- [ ] Integrate interactive terminal execution cards for bash & powershell.
-- [ ] Stream real-time thinking protocols with millisecond execution timers.
+- [x] Integrated back and forward history navigation for standalone iPad PWA.
+- [x] Integrated built-in transparent iPad math & coding keyboard.
+- [x] Created Automations & Schedules manager and Customizations studio (AGENTS.md rules & skills).
 - [ ] Render live KaTeX mathematical formulas:
 $$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$
 
 #### Phase 3: Verification & Studio Deployment
-- [ ] Continuous synchronization with desktop brain sessions (\`public/data/synced-sessions.json\`).
-- [ ] Verify PWA standalone mode across iPadOS Safari.`;
+- [x] Continuous synchronization with desktop brain sessions (\`public/data/synced-sessions.json\`).
+- [x] Verify PWA standalone mode across iPadOS Safari.`;
 
       artifact = {
         name: "antigravity-plan.md",
@@ -510,7 +838,7 @@ $$B_\\theta(R^+) - B_\\theta(R^-) = \\mu_0 K_0 \\cos\\theta$$
 2. Integrating yields the uniform interior magnetic field:
 $$\\vec{B}_{\\text{in}} = \\frac{\\mu_0 K_0}{2} \\hat{y}$$
 
-*Try solving this directly or click **Studio Preview** on the right to practice on your live quiz generator!*`;
+*Use the transparent math keyboard below to type equations or test this directly in the live Studio Preview!*`;
 
     } else if (lower.startsWith("/search")) {
       thinking = "Executing simulated live web and documentation search across Google DeepMind, SMU SCIS admissions, and GitHub.";
@@ -544,6 +872,7 @@ You can ask me to:
 - 🧪 **Generate JEE practice questions** with \`/quiz\`
 - 🔍 **Search documentation** with \`/search\`
 - 🔄 **Sync PC conversation history** with \`/sync\`
+- ⚡ **Manage background schedules** with \`/automation\`
 
 ${!Store.getApiKey() ? `> [!TIP]
 > **24/7 Cloud Generation:** To enable real-time token streaming with live Gemini 2.5 Flash/Pro, tap the **Settings** gear in the sidebar and paste your [free Google Gemini API Key](https://aistudio.google.com/app/apikey).` : ""}`;
@@ -574,7 +903,7 @@ ${!Store.getApiKey() ? `> [!TIP]
     }
   }
 
-  // 8. Session State Persistence
+  // 12. Session State Persistence
   async function loadSessions() {
     let sessions = Store.getSessions();
     if (!sessions || sessions.length === 0) {
@@ -636,7 +965,7 @@ ${!Store.getApiKey() ? `> [!TIP]
     renderSessionsList();
   }
 
-  function switchSession(id) {
+  function switchSession(id, record = true) {
     const sessions = Store.getSessions();
     activeSession = sessions.find(s => s.id === id) || sessions[0];
     if (!activeSession) return;
@@ -645,6 +974,10 @@ ${!Store.getApiKey() ? `> [!TIP]
     document.getElementById("sessionTitle").textContent = activeSession.title;
     renderChatStream();
     renderSessionsList();
+
+    if (record) {
+      recordNavHistory(activeSession.id);
+    }
 
     if (activeSession.artifacts && activeSession.artifacts.length > 0) {
       root.showArtifact(activeSession.artifacts[0]);
@@ -682,7 +1015,7 @@ ${!Store.getApiKey() ? `> [!TIP]
     }
   }
 
-  // 9. Settings Modal
+  // 13. Settings Modal
   function initSettingsModal() {
     const modal = document.getElementById("settingsModal");
     const openBtn = document.getElementById("settingsBtn");
@@ -716,7 +1049,7 @@ ${!Store.getApiKey() ? `> [!TIP]
     });
   }
 
-  // 10. GitHub Repository Tree Explorer
+  // 14. GitHub Repository Tree Explorer
   async function loadRepoFiles() {
     const treeEl = document.getElementById("repoTree");
     treeEl.innerHTML = `<div style="padding:12px; color:var(--ink-secondary);">Fetching repo files...</div>`;
@@ -758,7 +1091,7 @@ ${!Store.getApiKey() ? `> [!TIP]
     }
   }
 
-  // 11. Ambient Background Particle Engine
+  // 15. Ambient Background Particle Engine
   function initAmbientBackground() {
     const canvas = document.getElementById("ambientCanvas");
     if (!canvas) return;
@@ -772,13 +1105,13 @@ ${!Store.getApiKey() ? `> [!TIP]
     });
 
     const particles = [];
-    const count = Math.min(24, Math.floor((width * height) / 45000));
+    const count = Math.min(22, Math.floor((width * height) / 48000));
     for (let i = 0; i < count; i++) {
       particles.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.25,
-        vy: (Math.random() - 0.5) * 0.25,
+        vx: (Math.random() - 0.5) * 0.22,
+        vy: (Math.random() - 0.5) * 0.22,
         radius: Math.random() * 2 + 1,
         color: i % 2 === 0 ? "rgba(99, 102, 241, " : "rgba(6, 182, 212, "
       });

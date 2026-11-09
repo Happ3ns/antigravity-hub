@@ -581,3 +581,270 @@
   border-color: var(--accent-indigo);
   box-shadow: 0 0 16px var(--accent-indigo-glow);
 }
+
+/* ── Navigation History Controls (Back & Forward) ── */
+.nav-history-controls {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-arrow-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-arrow-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.nav-arrow-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.nav-arrow-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* ── Transparent Built-in iPad Keyboard & Accessory Bar ── */
+.ipad-transparent-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(16, 20, 34, 0.45);
+  backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  padding: 6px 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-bottom: 4px;
+}
+
+.keyboard-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.keyboard-row::-webkit-scrollbar {
+  display: none;
+}
+
+.kb-key {
+  flex-shrink: 0;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.kb-key:hover {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #fff;
+}
+
+.kb-key:active {
+  transform: scale(0.92);
+  background: rgba(99, 102, 241, 0.55);
+}
+
+.kb-key.action-key {
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.keyboard-expanded-pad {
+  padding-top: 6px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.kb-pad-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 5px;
+}
+
+@media (max-width: 800px) {
+  .kb-pad-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* ── Switch Toggle ── */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.15);
+  transition: .2s;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .2s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--accent-indigo);
+}
+
+input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+/* ── Automations Cards & Studio Modals ── */
+.automation-card {
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.16s ease;
+}
+
+.automation-card:hover {
+  border-color: var(--border-hover);
+}
+
+.automation-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.automation-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.automation-title-wrap strong {
+  font-size: 13.5px;
+  color: #fff;
+}
+
+.automation-title-wrap span {
+  font-size: 11px;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+}
+
+.automation-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+  border-top: 1px solid var(--border-hairline);
+  padding-top: 8px;
+}
+
+/* ── Customizations Skill Item Card ── */
+.skill-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-hairline);
+  gap: 12px;
+  transition: border-color 0.16s ease;
+}
+
+.skill-card-item:hover {
+  border-color: var(--border-hover);
+}
+
+.skill-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skill-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.rules-editor-textarea {
+  width: 100%;
+  height: 220px;
+  background: #060810;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: #f1f5f9;
+  resize: vertical;
+  outline: none;
+}
+
+.rules-editor-textarea:focus {
+  border-color: var(--accent-indigo);
+}
