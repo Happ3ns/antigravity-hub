@@ -1127,6 +1127,65 @@
     });
 
     sendBtn.addEventListener("click", sendMessage);
+
+    function launchInteractiveDemo() {
+      try {
+        const modal = document.getElementById("settingsModal");
+        if (modal && modal.open) modal.close();
+      } catch (e) {}
+
+      showToast("⚡ Launching interactive agent simulation...", "info");
+
+      const input = document.getElementById("promptInput");
+      if (input) {
+        input.value = "";
+        input.style.height = "auto";
+      }
+
+      createNewSession("Demo: Agent Architecture & Tools");
+
+      const demoPrompt = "/plan Architect autonomous AI agent with 24 MCP plugins, subagents fleet, and background automations";
+
+      const stream = document.getElementById("chatStream");
+      const userMsg = document.createElement("div");
+      userMsg.className = "chat-msg user";
+      userMsg.textContent = demoPrompt;
+      stream.appendChild(userMsg);
+
+      activeSession.messages.push({ role: "user", content: demoPrompt, created_at: new Date().toISOString() });
+      saveActiveSession();
+
+      const thinkingEl = document.createElement("div");
+      thinkingEl.className = "chat-msg assistant thinking-active";
+      thinkingEl.innerHTML = `
+        <div class="assistant-header">
+          <div class="assistant-avatar">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(30 12 12)"/>
+              <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)"/>
+            </svg>
+          </div>
+          <span class="assistant-title">Antigravity</span>
+          <span class="assistant-model-tag">${Store.getModel()}</span>
+        </div>
+        <div style="padding: 10px 14px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; margin-top: 8px; font-family: var(--font-mono); font-size: 12.5px; color: #a5b4fc; display: flex; align-items: center; gap: 8px;">
+          <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#818cf8; box-shadow:0 0 8px #818cf8; animation:pulse 1s infinite;"></span>
+          <span>Simulating multi-agent reasoning across 24 God Plugins & MCP fleet...</span>
+        </div>
+      `;
+      stream.appendChild(thinkingEl);
+      stream.scrollTop = stream.scrollHeight;
+
+      setTimeout(() => {
+        thinkingEl.remove();
+        handleLocalAgentResponse(demoPrompt);
+      }, 600);
+    }
+
+    document.getElementById("interactiveDemoBtn")?.addEventListener("click", launchInteractiveDemo);
+    document.getElementById("runDemoModeBtn")?.addEventListener("click", launchInteractiveDemo);
+    root.launchInteractiveDemo = launchInteractiveDemo;
   }
 
   function sendMessage() {
@@ -1749,7 +1808,33 @@ ${!Store.getApiKey() ? `> [!TIP]
   function renderChatStream() {
     const stream = document.getElementById("chatStream");
     stream.innerHTML = "";
-    if (!activeSession || !activeSession.messages) return;
+    if (!activeSession) return;
+
+    if (!activeSession.messages || activeSession.messages.length === 0) {
+      const welcomeCard = document.createElement("div");
+      welcomeCard.className = "welcome-empty-card";
+      welcomeCard.style.cssText = "text-align: center; max-width: 580px; margin: 36px auto; padding: 24px; background: rgba(18, 22, 34, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; backdrop-filter: blur(12px);";
+      welcomeCard.innerHTML = `
+        <div style="width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #06b6d4); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(99,102,241,0.4);">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(30 12 12)"/>
+            <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)"/>
+          </svg>
+        </div>
+        <h2 style="font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 8px;">Antigravity iPadOS & Desktop Studio</h2>
+        <p style="font-size: 13.5px; color: #94a3b8; line-height: 1.5; margin-bottom: 20px;">
+          Autonomous agentic workspace with 24 God Plugins, specialized subagents fleet, MCP connectors, and background automations.
+        </p>
+        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+          <button class="demo-start-hero-btn" onclick="window.launchInteractiveDemo && window.launchInteractiveDemo()" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border: none; padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(99,102,241,0.35);">
+            ⚡ Try Demo Mode (Instant Simulation)
+          </button>
+        </div>
+      `;
+      stream.appendChild(welcomeCard);
+      return;
+    }
 
     activeSession.messages.forEach(msg => {
       if (msg.role === "user") {
@@ -1915,26 +2000,3 @@ ${!Store.getApiKey() ? `> [!TIP]
   }
 
 })(typeof window !== "undefined" ? window : globalThis);
-
-  function launchInteractiveDemo() {
-    const input = document.getElementById("chatInput");
-    const demoPrompt = "/plan Architect autonomous AI agent with 24 MCP plugins, subagents fleet, and background automations";
-
-    // Close any open settings modal
-    try {
-      const modal = document.getElementById("settingsModal");
-      if (modal && modal.open) modal.close();
-    } catch (e) {}
-
-    showToast("Launching interactive agent demo simulation...", "info");
-
-    if (input) {
-      input.value = demoPrompt;
-      setTimeout(() => {
-        handleSendMessage();
-      }, 150);
-    }
-  }
-
-  document.getElementById("interactiveDemoBtn")?.addEventListener("click", launchInteractiveDemo);
-  document.getElementById("runDemoModeBtn")?.addEventListener("click", launchInteractiveDemo);
