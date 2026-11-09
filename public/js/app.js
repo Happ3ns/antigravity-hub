@@ -928,10 +928,14 @@
     const pillBtn = document.getElementById("activeModelPill");
     const closeBtn = document.getElementById("closeModelModalBtn");
     const cards = document.querySelectorAll(".model-option-card");
+    const applyCustomBtn = document.getElementById("applyCustomModelBtn");
+    const customInput = document.getElementById("customModelIdInput");
 
     updateModelDisplay();
 
     pillBtn?.addEventListener("click", () => {
+      const current = Store.getModel();
+      cards.forEach(c => c.classList.toggle("active", c.getAttribute("data-model") === current));
       modal?.showModal();
     });
 
@@ -947,7 +951,21 @@
         card.classList.add("active");
         updateModelDisplay();
         modal?.close();
+        showToast(`Active model: ${modelId}`);
       });
+    });
+
+    applyCustomBtn?.addEventListener("click", () => {
+      const customId = (customInput?.value || "").trim();
+      if (!customId) {
+        alert("Please enter a model ID (e.g. gemini-3.8-flash).");
+        return;
+      }
+      Store.setModel(customId);
+      cards.forEach(c => c.classList.remove("active"));
+      updateModelDisplay();
+      modal?.close();
+      showToast(`Active model: ${customId}`);
     });
 
     // Mode Switcher buttons
@@ -970,13 +988,14 @@
     const textEl = document.getElementById("activeModelPillText");
     const currentModel = Store.getModel();
     const map = {
+      "gemini-3.8-flash": "✨ Gemini 3.8 Flash",
       "gemini-2.5-flash": "⚡ Gemini 2.5 Flash",
       "gemini-2.5-pro": "🧠 Gemini 2.5 Pro",
       "gemini-2.0-flash-thinking-exp": "🔬 2.0 Flash Thinking",
       "gemini-2.0-flash": "🚀 Gemini 2.0 Flash"
     };
     if (textEl) {
-      textEl.textContent = map[currentModel] || currentModel;
+      textEl.textContent = map[currentModel] || `✨ ${currentModel}`;
     }
   }
 

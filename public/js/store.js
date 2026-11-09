@@ -534,7 +534,7 @@
     },
 
     getModel: function () {
-      return localStorage.getItem(STORAGE_KEYS.MODEL) || "gemini-2.5-flash";
+      return localStorage.getItem(STORAGE_KEYS.MODEL) || "gemini-3.8-flash";
     },
 
     setModel: function (m) {
