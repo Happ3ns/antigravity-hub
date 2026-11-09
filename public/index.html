@@ -353,7 +353,7 @@
   </div>
 
   <!-- Automations & Background Tasks Modal -->
-  <dialog class="settings-modal" id="automationsModal" style="max-width: 540px;">
+  <dialog class="settings-modal" id="automationsModal" style="max-width: 580px; width: 95vw;">
     <div class="modal-card">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:8px;">
@@ -365,8 +365,82 @@
 
       <div class="modal-body" style="gap:14px; max-height:480px; overflow-y:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:12px; color:var(--ink-secondary);">Background triggers and recurring agent workflows:</span>
+          <span style="font-size:12px; color:var(--ink-secondary);">Background triggers, cron schedules &amp; timer workflows:</span>
           <button class="btn-primary" id="newAutomationBtn" style="padding:4px 10px; font-size:11px;">+ New Automation</button>
+        </div>
+
+        <!-- New Automation Builder Form (Collapsible) -->
+        <div id="newAutomationForm" class="hidden" style="background:#090d18; border:1px solid var(--border-subtle); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:10px;">
+          <strong style="color:#fff; font-size:13px;">Create Scheduled Background Automation</strong>
+
+          <div class="config-field">
+            <label>Automation Title</label>
+            <input type="text" id="autoTitleInput" placeholder="e.g. Daily JEE Practice Problem">
+          </div>
+
+          <div class="custom-mcp-form-grid">
+            <div class="config-field">
+              <label>Cadence Frequency</label>
+              <select class="model-select" id="autoCadenceSelect" style="padding:8px 10px;">
+                <option value="interval">Recurring Interval (mins/hrs)</option>
+                <option value="daily" selected>Daily at Specific Time</option>
+                <option value="weekly">Weekly on Specific Day</option>
+                <option value="timer">One-Shot Timer (Countdown)</option>
+                <option value="cron">Custom 5-Part Cron</option>
+              </select>
+            </div>
+
+            <!-- Dynamic Cadence Config Rows -->
+            <div class="config-field" id="autoCadenceDailyRow">
+              <label>Execution Time</label>
+              <input type="time" id="autoDailyTime" value="09:00" style="padding:7px 10px;">
+            </div>
+
+            <div class="config-field hidden" id="autoCadenceIntervalRow">
+              <label>Repeat Every (Minutes)</label>
+              <input type="number" id="autoIntervalMins" min="5" max="1440" value="30" style="padding:7px 10px;">
+            </div>
+
+            <div class="config-field hidden" id="autoCadenceWeeklyRow">
+              <label>Day of Week</label>
+              <select class="model-select" id="autoWeeklyDay" style="padding:8px 10px;">
+                <option value="Monday">Monday</option>
+                <option value="Tuesday">Tuesday</option>
+                <option value="Wednesday">Wednesday</option>
+                <option value="Thursday">Thursday</option>
+                <option value="Friday">Friday</option>
+                <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
+              </select>
+            </div>
+
+            <div class="config-field hidden" id="autoCadenceTimerRow">
+              <label>Countdown (Minutes from now)</label>
+              <input type="number" id="autoTimerMins" min="1" max="180" value="15" style="padding:7px 10px;">
+            </div>
+
+            <div class="config-field hidden" id="autoCadenceCronRow">
+              <label>Standard Cron Expression</label>
+              <input type="text" id="autoCronExpr" value="0 9 * * *" placeholder="0 9 * * *">
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>Agent Action / Prompt to Execute</label>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:4px;" id="autoPromptChips">
+              <button class="chip-btn auto-chip" data-prompt="/quiz Generate a challenging JEE Advanced calculus or electrodynamics problem.">JEE Quiz 🧪</button>
+              <button class="chip-btn auto-chip" data-prompt="/sync">PC Sync 🔄</button>
+              <button class="chip-btn auto-chip" data-prompt="Audit my current GitHub portfolio and prepare SMU SCIS interview talking points.">Admissions 🇸🇬</button>
+              <button class="chip-btn auto-chip" data-prompt="/search Latest breakthrough papers on LLM agentic reasoning.">arXiv Sweep 📚</button>
+              <button class="chip-btn auto-chip" data-prompt="/plan">Create Plan 📋</button>
+            </div>
+            <textarea id="autoPromptInput" rows="2" placeholder="e.g. /quiz or /plan or custom instruction..." style="padding:8px 10px; background:#060810; border:1px solid var(--border-hairline); border-radius:6px; color:#fff; font-size:12px; font-family:var(--font-mono);"></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button class="btn-ghost" id="cancelNewAutoBtn" style="padding:4px 10px; font-size:11px;">Cancel</button>
+            <button class="btn-primary" id="saveNewAutoBtn" style="padding:4px 12px; font-size:11px;">+ Schedule Automation</button>
+          </div>
         </div>
 
         <div id="automationsListContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
@@ -379,14 +453,14 @@
   </dialog>
 
   <!-- Customizations & MCP Plugins Marketplace Studio -->
-  <dialog class="settings-modal" id="customizationsModal" style="max-width: 680px; width: 95vw;">
+  <dialog class="settings-modal" id="customizationsModal" style="max-width: 720px; width: 95vw;">
     <div class="modal-card">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:8px;">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--accent-indigo)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
           <div>
             <h3 style="font-size:16.5px;">Antigravity Extensions &amp; Marketplace</h3>
-            <span style="font-size:11px; color:var(--ink-muted);">God Plugins, Custom MCP Servers, Rules &amp; Skills</span>
+            <span style="font-size:11px; color:var(--ink-muted);">God Plugins, Custom MCP Servers, Rules, Skills &amp; Subagents</span>
           </div>
         </div>
         <button class="icon-btn-ghost" id="closeCustomizationsModalBtn">✕</button>
@@ -396,6 +470,7 @@
       <div class="artifacts-tabs" style="margin-bottom:14px; overflow-x:auto;">
         <button class="art-tab active" data-cust-tab="plugins">Plugins &amp; MCP</button>
         <button class="art-tab" data-cust-tab="add-mcp">+ Add Custom MCP</button>
+        <button class="art-tab" data-cust-tab="subagents">Subagents Hub</button>
         <button class="art-tab" data-cust-tab="skills">Skills Directory</button>
         <button class="art-tab" data-cust-tab="rules">Rules (AGENTS.md)</button>
         <button class="art-tab" data-cust-tab="appearance">Theme &amp; Keyboard</button>
@@ -404,14 +479,24 @@
       <!-- Tab 1: God Plugins & MCP Catalog -->
       <div class="cust-tab-panel" id="custTabPlugins">
         <div class="plugin-category-bar" id="pluginCategoryBar">
-          <button class="chip-btn active" data-cat="all">All (10)</button>
+          <button class="chip-btn active" data-cat="all">All (24)</button>
           <button class="chip-btn" data-cat="Design">Design</button>
           <button class="chip-btn" data-cat="Productivity">Productivity</button>
-          <button class="chip-btn" data-cat="Backend">Backend</button>
+          <button class="chip-btn" data-cat="Backend">Backend &amp; Cloud</button>
           <button class="chip-btn" data-cat="Developer Tools">Developer Tools</button>
-          <button class="chip-btn" data-cat="Research">Research</button>
+          <button class="chip-btn" data-cat="Research">Research &amp; Science</button>
+          <button class="chip-btn" data-cat="Business">Business</button>
         </div>
         <div class="plugin-market-grid" id="pluginMarketGrid"></div>
+      </div>
+
+      <!-- Tab: Subagents Hub & Autonomous Fleet -->
+      <div class="cust-tab-panel hidden" id="custTabSubagents">
+        <div style="margin-bottom:12px;">
+          <strong style="color:#fff; font-size:13.5px;">Antigravity Autonomous Subagent Fleet</strong>
+          <p style="font-size:11.5px; color:var(--ink-secondary); margin-top:2px;">Desktop Antigravity multi-agent architecture. Spawn and dispatch specialized subagents to tackle complex tasks without parent context clutter.</p>
+        </div>
+        <div class="subagents-grid" id="subagentsGrid"></div>
       </div>
 
       <!-- Tab 2: Connect Custom MCP Server -->

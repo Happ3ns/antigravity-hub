@@ -107,15 +107,15 @@
     },
     {
       id: "science-suite",
-      name: "Science & BioMol MCP",
+      name: "DeepMind Science & BioMol MCP",
       icon: "🔬",
       category: "Research",
       author: "DeepMind Science",
-      desc: "Query PDB 3D macromolecular structures, ChEMBL bioactivity assays, and PubChem compounds.",
+      desc: "Query PDB 3D macromolecular structures, AlphaFold models, ChEMBL assays, and PubChem compounds.",
       authPlaceholder: "Public Open Access",
       authKey: "",
       enabled: true,
-      tools: ["pdb_database", "chembl_database", "pubchem_search"]
+      tools: ["pdb_database", "chembl_database", "pubchem_search", "alphafold_fetch"]
     },
     {
       id: "canva",
@@ -142,16 +142,259 @@
       tools: ["stripe_api_read", "create_invoice", "customer_search"]
     },
     {
-      id: "railway-netlify",
-      name: "Cloud Hosting & Deploy MCP",
-      icon: "☁️",
-      category: "Cloud",
-      author: "Railway & Netlify",
-      desc: "Deploy edge functions, manage background services, inspect build logs, and bind domains.",
-      authPlaceholder: "Railway / Netlify Token",
-      authKey: "ag_cloud_token",
+      id: "railway",
+      name: "Railway Cloud Hosting MCP",
+      icon: "🚂",
+      category: "Backend",
+      author: "Railway",
+      desc: "Deploy edge services, manage background containers, inspect build logs, and bind custom domains.",
+      authPlaceholder: "railway_api_...",
+      authKey: "ag_railway_token",
       enabled: true,
-      tools: ["create_deployment", "get_service_logs", "list_domains"]
+      tools: ["railway_deploy", "get_service_logs", "list_variables", "restart_service"]
+    },
+    {
+      id: "netlify",
+      name: "Netlify Edge & Deploy MCP",
+      icon: "🌐",
+      category: "Backend",
+      author: "Netlify",
+      desc: "Instant serverless deploys, edge function invocations, form submissions, and CDN cache purges.",
+      authPlaceholder: "nfp_...",
+      authKey: "ag_netlify_token",
+      enabled: true,
+      tools: ["netlify_deploy", "purge_cdn_cache", "list_deployments"]
+    },
+    {
+      id: "vercel",
+      name: "Vercel AI & Cloud SDK MCP",
+      icon: "▲",
+      category: "Backend",
+      author: "Vercel Official",
+      desc: "Vercel Functions, Edge Middleware, Blob Storage, AI SDK streaming, and preview URL generation.",
+      authPlaceholder: "vercel_token_...",
+      authKey: "ag_vercel_token",
+      enabled: true,
+      tools: ["deploy_vercel", "get_env_vars", "list_projects", "inspect_metrics"]
+    },
+    {
+      id: "google-workspace",
+      name: "Google Workspace MCP",
+      icon: "📁",
+      category: "Productivity",
+      author: "Google",
+      desc: "Connect directly to Google Docs, Sheets, Slides, Drive files, and Google Calendar events.",
+      authPlaceholder: "OAuth2 Workspace Token",
+      authKey: "ag_google_workspace_token",
+      enabled: true,
+      tools: ["docs_read", "sheets_update", "slides_generate", "calendar_schedule"]
+    },
+    {
+      id: "chrome-devtools",
+      name: "Chrome DevTools & DOM Inspector MCP",
+      icon: "🔍",
+      category: "Developer Tools",
+      author: "Google Chrome",
+      desc: "Live browser automation, DOM accessibility audits (a11y), network timeline inspection, and console logs.",
+      authPlaceholder: "Built-in Browser Inspector",
+      authKey: "",
+      enabled: true,
+      tools: ["inspect_dom", "capture_screenshot", "audit_a11y", "get_console_logs"]
+    },
+    {
+      id: "coderabbit",
+      name: "CodeRabbit Automated Reviewer MCP",
+      icon: "🐇",
+      category: "Developer Tools",
+      author: "CodeRabbit AI",
+      desc: "Autonomous pull request reviews, SAST security vulnerability triage, and automated 1-click autofix plans.",
+      authPlaceholder: "coderabbit_api_...",
+      authKey: "ag_coderabbit_token",
+      enabled: true,
+      tools: ["review_pr", "generate_autofix", "sast_audit"]
+    },
+    {
+      id: "mobbin",
+      name: "Mobbin UI/UX Design Flows MCP",
+      icon: "📱",
+      category: "Design",
+      author: "Mobbin",
+      desc: "Search world-class iOS, iPadOS, and web UI screens, user journey flows, and design tear-downs.",
+      authPlaceholder: "mobbin_token_...",
+      authKey: "ag_mobbin_token",
+      enabled: false,
+      tools: ["search_screens", "search_flows", "get_collection"]
+    },
+    {
+      id: "firebase",
+      name: "Firebase & Firestore Rules MCP",
+      icon: "🔥",
+      category: "Backend",
+      author: "Google Firebase",
+      desc: "Firestore database access, declarative security rules authoring (firestore.rules), and Auth config.",
+      authPlaceholder: "firebase_service_account.json",
+      authKey: "ag_firebase_token",
+      enabled: true,
+      tools: ["lint_rules", "deploy_firestore", "manage_auth"]
+    },
+    {
+      id: "databricks",
+      name: "Databricks Unified Analytics MCP",
+      icon: "🧱",
+      category: "Backend",
+      author: "Databricks",
+      desc: "Run Spark SQL queries, manage Lakeflow data pipelines, Unity Catalog metric views, and DABs.",
+      authPlaceholder: "dapi_...",
+      authKey: "ag_databricks_token",
+      enabled: false,
+      tools: ["run_spark_sql", "list_catalogs", "lakeflow_status"]
+    },
+    {
+      id: "pandadoc",
+      name: "PandaDoc Smart Contracts MCP",
+      icon: "📄",
+      category: "Business",
+      author: "PandaDoc",
+      desc: "Create legally binding proposals, automated NDAs, employment agreements, and audit signing velocity.",
+      authPlaceholder: "panda_api_...",
+      authKey: "ag_pandadoc_token",
+      enabled: false,
+      tools: ["create_document", "check_signing_status", "send_nda"]
+    },
+    {
+      id: "monday",
+      name: "Monday.com Work OS MCP",
+      icon: "📊",
+      category: "Productivity",
+      author: "Monday.com",
+      desc: "Query board workspaces, update task columns, sync milestones, and automate team assignment.",
+      authPlaceholder: "monday_api_...",
+      authKey: "ag_monday_token",
+      enabled: false,
+      tools: ["query_boards", "update_column_value", "list_workspaces"]
+    },
+    {
+      id: "leapwork",
+      name: "Leapwork Play QA & Automation MCP",
+      icon: "🎮",
+      category: "Developer Tools",
+      author: "Leapwork",
+      desc: "Execute end-to-end regression runlists, trigger visual automation flows, and analyze test reports.",
+      authPlaceholder: "leapwork_api_...",
+      authKey: "ag_leapwork_token",
+      enabled: false,
+      tools: ["play_run_test", "play_list_capabilities", "play_get_artifacts"]
+    },
+    {
+      id: "gemini-docs",
+      name: "Gemini Official Documentation MCP",
+      icon: "📖",
+      category: "Research",
+      author: "Google DeepMind",
+      desc: "Live search of official Google Gemini API docs, SDK reference for Python/JS/Go, and migration guides.",
+      authPlaceholder: "Direct Upstream Docs (No key needed)",
+      authKey: "",
+      enabled: true,
+      tools: ["gemini_search_docs", "gemini_get_doc"]
+    },
+    {
+      id: "arxiv",
+      name: "arXiv Academic Literature MCP",
+      icon: "📚",
+      category: "Research",
+      author: "Cornell arXiv",
+      desc: "Search computer science preprints, AI papers, mathematical physics derivations, and extract PDF text.",
+      authPlaceholder: "Public Open Access",
+      authKey: "",
+      enabled: true,
+      tools: ["search_arxiv", "download_paper_text", "extract_citations"]
+    },
+    {
+      id: "subagents-fleet",
+      name: "Multi-Agent Subagent Fleet MCP",
+      icon: "🤖",
+      category: "Developer Tools",
+      author: "Antigravity Autonomous Core",
+      desc: "Orchestrate 8 specialized parallel subagents (Research, Code Reviewer, Architect, Deployment, etc.).",
+      authPlaceholder: "Built-in Autonomous Engine",
+      authKey: "",
+      enabled: true,
+      tools: ["invoke_subagent", "dispatch_parallel", "send_agent_message"]
+    }
+  ];
+
+  const DEFAULT_SUBAGENTS = [
+    {
+      id: "research",
+      name: "Research Subagent",
+      role: "Codebase & arXiv Explorer",
+      icon: "🔍",
+      model: "flash",
+      desc: "Read-only exploration of repository files, arXiv preprints, and official documentation without context clutter.",
+      tools: ["read_file", "search_web", "list_resources"]
+    },
+    {
+      id: "code-reviewer",
+      name: "Code Reviewer",
+      role: "SAST & Diff Auditor",
+      icon: "🧐",
+      model: "pro",
+      desc: "Runs automated code reviews, type safety checks, and security flaw detection before commits.",
+      tools: ["run_command", "git_diff", "check_syntax"]
+    },
+    {
+      id: "ai-architect",
+      name: "AI Architect",
+      role: "AI SDK & Agent Designer",
+      icon: "🧠",
+      model: "pro",
+      desc: "Specializes in architecting AI features, AI SDK streaming, durable workflows, and MCP server bridges.",
+      tools: ["mcp_call", "plan_architect", "eval_models"]
+    },
+    {
+      id: "deployment-expert",
+      name: "Deployment Expert",
+      role: "CI/CD & Cloud Specialist",
+      icon: "🚀",
+      model: "flash",
+      desc: "Specializes in deployment strategies, CI/CD pipelines, preview URLs, domain routing, and rollbacks.",
+      tools: ["railway_deploy", "netlify_deploy", "vercel_deploy"]
+    },
+    {
+      id: "performance-optimizer",
+      name: "Performance Optimizer",
+      role: "Vitals & Bundle Tuner",
+      icon: "⚡",
+      model: "flash",
+      desc: "Investigates slow rendering, Core Web Vitals, memory leaks, and client-side asset optimization.",
+      tools: ["chrome_devtools", "heap_snapshot", "lighthouse"]
+    },
+    {
+      id: "image-generator",
+      name: "Image & Visual Generator",
+      role: "Mermaid & SVG Generator",
+      icon: "🎨",
+      model: "flash",
+      desc: "Generates UI wireframes, flowcharts, KaTeX charts, and vector diagrams.",
+      tools: ["generate_mermaid", "generate_svg", "canva_design"]
+    },
+    {
+      id: "firestore-rules-author",
+      name: "Firestore Rules Author",
+      role: "Security Rules Specialist",
+      icon: "🛡️",
+      model: "flash",
+      desc: "Specialist subagent for Firebase Authentication and Cloud Firestore declarative security rules.",
+      tools: ["firestore_lint", "test_rules"]
+    },
+    {
+      id: "self",
+      name: "Self Subagent",
+      role: "Recursive Generalist",
+      icon: "🧬",
+      model: "inherit",
+      desc: "Inherits parent agent's full tools, context, and permissions to execute parallel tasks.",
+      tools: ["all_tools"]
     }
   ];
 
@@ -168,7 +411,10 @@
     {
       id: "auto-jee",
       title: "Daily JEE Practice Problem",
+      cadence: "daily",
+      time: "08:00",
       schedule: "Every morning at 08:00 AM",
+      cron: "0 8 * * *",
       prompt: "/quiz Generate a challenging JEE Advanced calculus or electrodynamics problem with step-by-step proof.",
       status: "active",
       lastRun: "Today, 08:00 AM",
@@ -177,7 +423,10 @@
     {
       id: "auto-sync",
       title: "PC Brain & Transcripts Auto-Sync",
+      cadence: "interval",
+      intervalMinutes: 30,
       schedule: "Every 30 minutes",
+      cron: "*/30 * * * *",
       prompt: "/sync",
       status: "active",
       lastRun: "10 mins ago",
@@ -186,7 +435,11 @@
     {
       id: "auto-admissions",
       title: "Singapore Admissions Profile Audit",
+      cadence: "weekly",
+      day: "Monday",
+      time: "09:00",
       schedule: "Weekly on Mondays at 09:00 AM",
+      cron: "0 9 * * 1",
       prompt: "Audit my current GitHub portfolio and prepare SMU SCIS & NUS interview talking points.",
       status: "scheduled",
       lastRun: "3 days ago",
@@ -195,20 +448,38 @@
     {
       id: "auto-repo",
       title: "GitHub Repo Health Watcher",
+      cadence: "interval",
+      intervalMinutes: 120,
       schedule: "Every 2 hours",
+      cron: "0 */2 * * *",
       prompt: "Check Happ3ns/JEE-Quiz-Generator for commit status, build issues, and suggest optimizations.",
       status: "active",
       lastRun: "45 mins ago",
       enabled: true
     },
     {
-      id: "auto-news",
+      id: "auto-arxiv",
       title: "Daily arXiv AI Research Sweep",
+      cadence: "daily",
+      time: "10:00",
       schedule: "Daily at 10:00 AM",
-      prompt: "/search Latest breakthrough papers on LLM agentic reasoning and code synthesis.",
+      cron: "0 10 * * *",
+      prompt: "/search Latest breakthrough papers on LLM agentic reasoning, code synthesis, and autonomous tools.",
       status: "scheduled",
       lastRun: "Yesterday",
-      enabled: false
+      enabled: true
+    },
+    {
+      id: "auto-backup",
+      title: "Nightly Obsidian & Workspace Backup",
+      cadence: "daily",
+      time: "23:00",
+      schedule: "Daily at 11:00 PM",
+      cron: "0 23 * * *",
+      prompt: "/plan Export active sessions and markdown artifacts to local storage backup.",
+      status: "scheduled",
+      lastRun: "Yesterday",
+      enabled: true
     }
   ];
 
@@ -330,7 +601,14 @@
     getSkills: function () {
       try {
         const raw = localStorage.getItem(STORAGE_KEYS.SKILLS);
-        return raw ? JSON.parse(raw) : DEFAULT_SKILLS;
+        if (!raw) return DEFAULT_SKILLS;
+        const stored = JSON.parse(raw);
+        const existingIds = new Set(stored.map(s => s.id));
+        const merged = [...stored];
+        DEFAULT_SKILLS.forEach(s => {
+          if (!existingIds.has(s.id)) merged.push(s);
+        });
+        return merged;
       } catch (e) {
         return DEFAULT_SKILLS;
       }
@@ -355,11 +633,23 @@
       this.setSkills(skills);
     },
 
+    // ── Subagents Hub (Desktop Antigravity Fleet) ──
+    getSubagents: function () {
+      return DEFAULT_SUBAGENTS;
+    },
+
     // ── Plugins & MCP Marketplace ──
     getPlugins: function () {
       try {
         const raw = localStorage.getItem(STORAGE_KEYS.PLUGINS);
-        return raw ? JSON.parse(raw) : DEFAULT_PLUGINS;
+        if (!raw) return DEFAULT_PLUGINS;
+        const stored = JSON.parse(raw);
+        const existingIds = new Set(stored.map(p => p.id));
+        const merged = [...stored];
+        DEFAULT_PLUGINS.forEach(p => {
+          if (!existingIds.has(p.id)) merged.push(p);
+        });
+        return merged;
       } catch (e) {
         return DEFAULT_PLUGINS;
       }
@@ -415,7 +705,14 @@
     getAutomations: function () {
       try {
         const raw = localStorage.getItem(STORAGE_KEYS.AUTOMATIONS);
-        return raw ? JSON.parse(raw) : DEFAULT_AUTOMATIONS;
+        if (!raw) return DEFAULT_AUTOMATIONS;
+        const stored = JSON.parse(raw);
+        const existingIds = new Set(stored.map(a => a.id));
+        const merged = [...stored];
+        DEFAULT_AUTOMATIONS.forEach(a => {
+          if (!existingIds.has(a.id)) merged.push(a);
+        });
+        return merged;
       } catch (e) {
         return DEFAULT_AUTOMATIONS;
       }
@@ -429,6 +726,15 @@
       const list = this.getAutomations();
       list.push(auto);
       this.setAutomations(list);
+    },
+
+    updateAutomation: function (id, updates) {
+      const list = this.getAutomations();
+      const idx = list.findIndex(a => a.id === id);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], ...updates };
+        this.setAutomations(list);
+      }
     },
 
     toggleAutomation: function (id) {

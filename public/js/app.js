@@ -24,6 +24,7 @@
     initChatControls();
     applyThemeCustomizations();
     loadSessions();
+    startAutomationTicker();
   });
 
   // 1. Navigation History (Back & Forward)
@@ -149,6 +150,10 @@
     const closeBtn = document.getElementById("closeAutomationsModalBtn");
     const closeFooterBtn = document.getElementById("closeAutomationsFooterBtn");
     const newAutoBtn = document.getElementById("newAutomationBtn");
+    const newAutoForm = document.getElementById("newAutomationForm");
+    const cancelNewAutoBtn = document.getElementById("cancelNewAutoBtn");
+    const saveNewAutoBtn = document.getElementById("saveNewAutoBtn");
+    const cadenceSelect = document.getElementById("autoCadenceSelect");
 
     openBtn?.addEventListener("click", () => {
       renderAutomationsList();
@@ -159,24 +164,101 @@
     closeBtn?.addEventListener("click", closeModal);
     closeFooterBtn?.addEventListener("click", closeModal);
 
+    // Toggle creation form
     newAutoBtn?.addEventListener("click", () => {
-      const title = prompt("Enter Automation Title (e.g. Daily Singapore News Brief):");
-      if (!title) return;
-      const schedule = prompt("Enter Schedule (e.g. Every day at 9:00 AM, Every 1 hour):", "Every day at 09:00 AM");
-      const cmd = prompt("Enter Agent Prompt to execute:", "/plan Review admissions milestones.");
+      newAutoForm?.classList.toggle("hidden");
+      newAutoBtn.textContent = newAutoForm?.classList.contains("hidden") ? "+ New Automation" : "✕ Close Form";
+    });
+
+    cancelNewAutoBtn?.addEventListener("click", () => {
+      newAutoForm?.classList.add("hidden");
+      newAutoBtn.textContent = "+ New Automation";
+    });
+
+    // Dynamic Cadence selection
+    cadenceSelect?.addEventListener("change", () => {
+      const mode = cadenceSelect.value;
+      document.getElementById("autoCadenceDailyRow")?.classList.toggle("hidden", mode !== "daily" && mode !== "weekly");
+      document.getElementById("autoCadenceIntervalRow")?.classList.toggle("hidden", mode !== "interval");
+      document.getElementById("autoCadenceWeeklyRow")?.classList.toggle("hidden", mode !== "weekly");
+      document.getElementById("autoCadenceTimerRow")?.classList.toggle("hidden", mode !== "timer");
+      document.getElementById("autoCadenceCronRow")?.classList.toggle("hidden", mode !== "cron");
+    });
+
+    // Prompt suggestion chips
+    document.querySelectorAll(".auto-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const input = document.getElementById("autoPromptInput");
+        if (input) input.value = chip.getAttribute("data-prompt") || "";
+      });
+    });
+
+    // Save Automation
+    saveNewAutoBtn?.addEventListener("click", () => {
+      const titleInput = document.getElementById("autoTitleInput");
+      const promptInput = document.getElementById("autoPromptInput");
+      const title = (titleInput?.value || "").trim();
+      const promptText = (promptInput?.value || "").trim();
+      const cadence = cadenceSelect?.value || "daily";
+
+      if (!title) {
+        alert("Please enter a title for the automation.");
+        titleInput?.focus();
+        return;
+      }
+      if (!promptText) {
+        alert("Please enter the task prompt to execute.");
+        promptInput?.focus();
+        return;
+      }
+
+      let scheduleText = "";
+      let cronExpr = "";
+
+      if (cadence === "daily") {
+        const time = document.getElementById("autoDailyTime")?.value || "09:00";
+        scheduleText = `Daily at ${time}`;
+        const [hh, mm] = time.split(":");
+        cronExpr = `${mm || "0"} ${hh || "9"} * * *`;
+      } else if (cadence === "interval") {
+        const mins = document.getElementById("autoIntervalMins")?.value || "30";
+        scheduleText = `Every ${mins} minutes`;
+        cronExpr = `*/${mins} * * * *`;
+      } else if (cadence === "weekly") {
+        const day = document.getElementById("autoWeeklyDay")?.value || "Monday";
+        const time = document.getElementById("autoDailyTime")?.value || "09:00";
+        scheduleText = `Weekly on ${day}s at ${time}`;
+        const [hh, mm] = time.split(":");
+        cronExpr = `${mm || "0"} ${hh || "9"} * * 1`;
+      } else if (cadence === "timer") {
+        const mins = document.getElementById("autoTimerMins")?.value || "15";
+        scheduleText = `One-shot in ${mins} minutes`;
+        cronExpr = `timer:${Date.now() + parseInt(mins, 10) * 60000}`;
+      } else if (cadence === "cron") {
+        cronExpr = (document.getElementById("autoCronExpr")?.value || "0 9 * * *").trim();
+        scheduleText = `Cron: ${cronExpr}`;
+      }
 
       const newAuto = {
         id: "auto_" + Date.now(),
         title: title,
-        schedule: schedule || "Every day at 09:00 AM",
-        prompt: cmd || "/plan",
+        cadence: cadence,
+        schedule: scheduleText,
+        cron: cronExpr,
+        prompt: promptText,
         status: "active",
-        lastRun: "Never",
+        lastRun: "Scheduled",
+        lastRunTimestamp: Date.now(),
         enabled: true
       };
 
       Store.addAutomation(newAuto);
+      if (titleInput) titleInput.value = "";
+      if (promptInput) promptInput.value = "";
+      newAutoForm?.classList.add("hidden");
+      if (newAutoBtn) newAutoBtn.textContent = "+ New Automation";
       renderAutomationsList();
+      showToast(`⚡ Scheduled: "${title}"`);
     });
   }
 
@@ -192,7 +274,10 @@
       card.innerHTML = `
         <div class="automation-card-header">
           <div class="automation-title-wrap">
-            <strong>${auto.title}</strong>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong>${auto.title}</strong>
+              <span style="font-size:10px; font-family:var(--font-mono); background:rgba(6,182,212,0.15); border:1px solid rgba(6,182,212,0.3); color:var(--accent-cyan); padding:1px 6px; border-radius:4px;">${auto.cadence || "cron"}</span>
+            </div>
             <span>${auto.schedule}</span>
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
@@ -204,12 +289,12 @@
             <button class="delete-btn-ghost delete-auto-btn" data-id="${auto.id}" title="Delete Automation">✕</button>
           </div>
         </div>
-        <div style="font-size:12px; color:var(--ink-secondary); font-family:var(--font-mono); background:#060810; padding:6px 10px; border-radius:6px;">
+        <div style="font-size:12px; color:var(--ink-secondary); font-family:var(--font-mono); background:#060810; padding:6px 10px; border-radius:6px; word-break:break-word;">
           ${auto.prompt}
         </div>
         <div class="automation-meta">
-          <span>Status: <strong style="color:var(--accent-emerald);">${auto.status}</strong></span>
-          <span>Last trigger: ${auto.lastRun}</span>
+          <span>Status: <strong style="color:var(--accent-emerald);">${auto.status || "active"}</strong></span>
+          <span>Last trigger: ${auto.lastRun || "Never"}</span>
         </div>
       `;
 
@@ -282,6 +367,7 @@
       rulesTextarea.value = Store.getRules();
       renderPluginsGrid(activePluginCategory);
       renderCustomMcpList();
+      renderSubagentsGrid();
       renderSkillsList();
       kbSlider.value = Store.getKeyboardTransparency();
       kbLabel.textContent = `Translucency: ${kbSlider.value}% frosted glass blur`;
@@ -295,7 +381,7 @@
     closeBtn?.addEventListener("click", closeModal);
     cancelBtn?.addEventListener("click", closeModal);
 
-    // Tab switcher (all 5 tabs)
+    // Tab switcher (all 6 tabs)
     tabs.forEach(tab => {
       tab.addEventListener("click", () => {
         tabs.forEach(t => t.classList.remove("active"));
@@ -309,6 +395,9 @@
         } else if (target === "add-mcp") {
           document.getElementById("custTabAddMcp")?.classList.remove("hidden");
           renderCustomMcpList();
+        } else if (target === "subagents") {
+          document.getElementById("custTabSubagents")?.classList.remove("hidden");
+          renderSubagentsGrid();
         } else if (target === "skills") {
           document.getElementById("custTabSkills")?.classList.remove("hidden");
           renderSkillsList();
@@ -451,6 +540,113 @@
 
       grid.appendChild(card);
     });
+  }
+
+  // Render Subagents Hub & Dispatch Fleet
+  function renderSubagentsGrid() {
+    const grid = document.getElementById("subagentsGrid");
+    if (!grid) return;
+    const subagents = Store.getSubagents();
+    grid.innerHTML = "";
+
+    subagents.forEach(agent => {
+      const card = document.createElement("div");
+      card.className = "subagent-card";
+      card.innerHTML = `
+        <div class="subagent-header">
+          <div class="subagent-brand">
+            <span class="subagent-icon-box">${agent.icon}</span>
+            <div>
+              <strong style="color:#fff; font-size:13px;">${agent.name}</strong>
+              <div style="font-size:11px; color:var(--accent-cyan); font-family:var(--font-mono);">${agent.role}</div>
+            </div>
+          </div>
+          <span class="subagent-model-tag ${agent.model}">${agent.model.toUpperCase()}</span>
+        </div>
+        <p class="subagent-desc">${agent.desc}</p>
+        <div class="subagent-footer">
+          <div style="font-size:10.5px; font-family:var(--font-mono); color:var(--ink-muted);">
+            Tools: ${agent.tools.slice(0, 2).join(", ")}${agent.tools.length > 2 ? "..." : ""}
+          </div>
+          <button class="btn-primary dispatch-subagent-btn" data-id="${agent.id}" data-name="${agent.name}" style="padding:4px 10px; font-size:11px;">Dispatch 🚀</button>
+        </div>
+      `;
+
+      card.querySelector(".dispatch-subagent-btn")?.addEventListener("click", () => {
+        document.getElementById("customizationsModal")?.close();
+        const input = document.getElementById("promptInput");
+        input.value = `/dispatch ${agent.id} Execute autonomous subagent workflow.`;
+        input.focus();
+        showToast(`Dispatched ${agent.name} subagent`);
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  // Floating Toast Notification
+  function showToast(msg) {
+    let toast = document.getElementById("antigravityToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "antigravityToast";
+      toast.className = "antigravity-toast";
+      document.body.appendChild(toast);
+    }
+    toast.innerHTML = `<span style="font-size:15px;">⚡</span> <span>${msg}</span>`;
+    toast.classList.add("visible");
+    setTimeout(() => toast.classList.remove("visible"), 3200);
+  }
+
+  // Live In-Browser Automation & Cron Ticker
+  function startAutomationTicker() {
+    setInterval(() => {
+      const automations = Store.getAutomations();
+      const now = Date.now();
+      const nowDate = new Date();
+      const currentHh = String(nowDate.getHours()).padStart(2, "0");
+      const currentMm = String(nowDate.getMinutes()).padStart(2, "0");
+      const currentTimeStr = `${currentHh}:${currentMm}`;
+
+      automations.forEach(auto => {
+        if (!auto.enabled) return;
+
+        let shouldTrigger = false;
+
+        if (auto.cadence === "interval") {
+          const mins = parseInt((auto.schedule || "").replace(/\D/g, "") || "30", 10);
+          const intervalMs = mins * 60 * 1000;
+          const last = auto.lastRunTimestamp || 0;
+          if (now - last >= intervalMs) {
+            shouldTrigger = true;
+          }
+        } else if (auto.cadence === "daily") {
+          if (auto.time === currentTimeStr && (!auto.lastRunDate || auto.lastRunDate !== nowDate.toDateString())) {
+            shouldTrigger = true;
+            auto.lastRunDate = nowDate.toDateString();
+          }
+        } else if (auto.cadence === "timer" && auto.cron && auto.cron.startsWith("timer:")) {
+          const targetTime = parseInt(auto.cron.replace("timer:", ""), 10);
+          if (now >= targetTime) {
+            shouldTrigger = true;
+            auto.enabled = false;
+          }
+        }
+
+        if (shouldTrigger) {
+          auto.lastRun = `Today, ${nowDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+          auto.lastRunTimestamp = now;
+          Store.updateAutomation(auto.id, auto);
+          showToast(`⚡ Automation Fired: ${auto.title}`);
+
+          if (activeSession) {
+            const input = document.getElementById("promptInput");
+            if (input) input.value = auto.prompt;
+            sendMessage();
+          }
+        }
+      });
+    }, 25000);
   }
 
   // Custom MCP Server Handlers & List
@@ -1278,6 +1474,136 @@ Result: 1.7724538509
 Analytical sqrt(pi): 1.7724538509
 Code executed successfully in 14ms (0 errors).
 \`\`\``;
+
+    } else if (lower.startsWith("/subagents") || lower.startsWith("/teamwork")) {
+      const subagents = Store.getSubagents();
+      thinking = "Enumerating desktop Antigravity autonomous subagent registry and active dispatch capabilities.";
+      toolCalls.push({ name: "subagents_list_fleet", args: {} });
+      responseText = `### 🤖 Antigravity Autonomous Subagent Fleet
+
+Desktop Antigravity multi-agent architecture running on iPadOS:
+
+| Subagent | Role | Default Model | Key Tool Capabilities |
+| :--- | :--- | :--- | :--- |
+${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.toUpperCase()}\` | ${a.tools.join(", ")} |`).join("\n")}
+
+> [!TIP]
+> Dispatch any subagent immediately using \`/dispatch <subagent-id> <instruction>\` or tap **Customise > Subagents Hub**!`;
+
+    } else if (lower.startsWith("/dispatch")) {
+      const parts = prompt.split(" ");
+      const agentId = parts[1] || "research";
+      const task = parts.slice(2).join(" ") || "Execute assigned subagent workflow.";
+      thinking = `Spawning isolated subagent instance: [${agentId}]. Allocating child context window and sandboxed memory.`;
+      toolCalls.push({ name: "invoke_subagent", args: { TypeName: agentId, Role: "Specialist", Prompt: task } });
+      responseText = `🚀 **Subagent Dispatched:** \`${agentId}\`
+- **Assigned Task:** "${task}"
+- **Isolation Mode:** Branched workspace context (zero parent transcript clutter).
+- **Status:** Running background analysis...
+
+*Subagent completed execution with status: 0 errors.*`;
+
+    } else if (lower.startsWith("/schedule") || lower.startsWith("/automation")) {
+      thinking = "Parsing automation schedule cadence and configuring background cron timer.";
+      toolCalls.push({ name: "schedule_create", args: { prompt: prompt } });
+      document.getElementById("automationsModal")?.showModal();
+      renderAutomationsList();
+      responseText = `⚡ **Automations Studio Opened**
+- View your active background timers, interval sweeps, and scheduled agent jobs.
+- Tap **+ New Automation** to configure custom cadences (Daily, Weekly, Interval, or Cron).`;
+
+    } else if (lower.startsWith("/browser")) {
+      const targetUrl = prompt.replace("/browser", "").trim() || "https://admissions.smu.edu.sg";
+      thinking = `Launching headless browser MCP instance. Navigating to ${targetUrl} and evaluating DOM accessibility.`;
+      toolCalls.push({ name: "chrome_navigate", args: { url: targetUrl } });
+      toolCalls.push({ name: "chrome_capture_screenshot", args: {} });
+      responseText = `### 🌐 Chrome Browser Automation MCP
+
+**Navigated to:** \`${targetUrl}\`
+- **HTTP Status:** 200 OK
+- **Viewport:** 1024x768 (iPad landscape emulation)
+- **DOM Audit:** 0 accessibility violations, full semantic HTML structure.
+- **Console Errors:** None.`;
+
+    } else if (lower.startsWith("/grill-me")) {
+      thinking = "Initiating interactive design and architecture interview to resolve ambiguous decisions.";
+      responseText = `### 🎙️ Antigravity Interactive Alignment Interview
+
+I'm ready to grill you on your design decisions to ensure maximum technical rigor. Let's start with Phase 1:
+
+1. **Architecture Trade-off:** For your Singapore admissions portfolio, why choose a client-side PWA with PIN encryption over a traditional server-rendered SSR app?
+2. **State & Sync:** How do you guarantee zero token leaks when synchronizing desktop transcript logs with GitHub Pages?
+3. **Evaluation Metric:** How will you demonstrate your algorithmic problem-solving ability in the SMU SCIS Discovery Day interview?
+
+*Reply directly with your thoughts to proceed to Phase 2!*`;
+
+    } else if (lower.startsWith("/boost")) {
+      thinking = "Activating Boost Mode: engaging multi-perspective verification, formal logic proofs, and self-correction passes.";
+      responseText = `🚀 **Boost Mode Engaged**
+- Reasoning depth set to Maximum (extended chain-of-thought).
+- Cross-checking outputs against formal verification criteria and AGENTS.md constraints.
+- Model latency optimized for precision.`;
+
+    } else if (lower.startsWith("/learn")) {
+      const ruleToLearn = prompt.replace("/learn", "").trim();
+      thinking = `Extracting durable learning and persisting into AGENTS.md rules vault: "${ruleToLearn}".`;
+      if (ruleToLearn) {
+        const currentRules = Store.getRules();
+        const updatedRules = `${currentRules}\n- [User Rule]: ${ruleToLearn}`;
+        Store.setRules(updatedRules);
+        showToast("Learned new rule!");
+        responseText = `✅ **Learned & Persisted to AGENTS.md:**\n> "${ruleToLearn}"\n\nAntigravity will adhere to this constraint across all future sessions.`;
+      } else {
+        responseText = `Usage: \`/learn <instruction to permanently remember>\``;
+      }
+
+    } else if (lower.startsWith("/compact")) {
+      thinking = "Summarizing prior session trajectory, pruning dead tokens, and isolating key architectural decisions.";
+      responseText = `🧹 **Session Context Compacted**
+- Consolidated previous conversation turns.
+- Preserved active system rules, God Plugins state, and admissions milestones.
+- Context window headroom refreshed.`;
+
+    } else if (lower.startsWith("/vercel")) {
+      thinking = "Invoking Vercel AI & Cloud SDK MCP: checking deployments and edge function metrics.";
+      toolCalls.push({ name: "vercel_inspect_deployment", args: { project: "antigravity-hub" } });
+      responseText = `### ▲ Vercel AI & Cloud SDK MCP
+**Project:** \`antigravity-hub\`
+- **Status:** Ready (Production)
+- **Edge Middleware:** Active (0ms cold start)
+- **AI SDK Runtime:** Streaming SSE enabled
+- **Custom Metrics:** 99.8% cache hit rate on static assets.`;
+
+    } else if (lower.startsWith("/coderabbit")) {
+      thinking = "Invoking CodeRabbit Automated Reviewer MCP: performing SAST audit on local diffs.";
+      toolCalls.push({ name: "coderabbit_sast_audit", args: { target: "public/js" } });
+      responseText = `### 🐇 CodeRabbit Automated Reviewer MCP
+
+**Security & Quality Audit Summary:**
+- **Static Analysis (SAST):** 0 High/Critical vulnerabilities detected.
+- **Secrets Scanning:** Verified 0 leaked API keys, tokens, or hashes.
+- **Type Safety & Linting:** 100% clean across all 4 core scripts.
+- **Recommendation:** Pull request is ready for deployment.`;
+
+    } else if (lower.startsWith("/chrome")) {
+      thinking = "Invoking Chrome DevTools MCP: auditing DOM accessibility (a11y) and layout metrics.";
+      toolCalls.push({ name: "chrome_audit_a11y", args: {} });
+      responseText = `### 🔍 Chrome DevTools & a11y Audit MCP
+
+- **Retina Display Ratio:** 2.0x (Crisp subpixel font rendering confirmed)
+- **Safe Area Insets:** \`env(safe-area-inset-top)\` properly anchored.
+- **Status Bar Blur:** Eradicated (solid dark navigation header).
+- **Contrast Ratio:** 14.8:1 on primary text (AAA compliant).`;
+
+    } else if (lower.startsWith("/arxiv")) {
+      thinking = "Invoking arXiv Academic Literature MCP: searching recent preprints on LLM reasoning architectures.";
+      toolCalls.push({ name: "search_arxiv", args: { query: "agentic reasoning code generation" } });
+      responseText = `### 📚 arXiv Academic Literature MCP
+
+1. **DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning** (arXiv:2501.12948)
+   - Demonstrates emergence of long chain-of-thought reasoning without supervised fine-tuning.
+2. **SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering** (arXiv:2405.15793)
+   - Benchmarking agentic workflows against real-world GitHub issues.`;
 
     } else {
       thinking = `Processing user query: "${prompt}". Synthesizing response using workspace context and active Antigravity session knowledge.`;
