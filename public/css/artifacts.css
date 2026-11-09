@@ -1,13 +1,13 @@
 /* ── Artifacts Split-View Studio & Code Explorer ── */
 
 .artifacts-header {
-  padding: 10px 16px;
+  padding: max(12px, env(safe-area-inset-top, 12px)) 16px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border-hairline);
-  background: rgba(13, 16, 26, 0.85);
-  backdrop-filter: var(--blur-glass);
+  background: #0d101a;
+  flex-shrink: 0;
 }
 
 .artifacts-tabs {
@@ -47,9 +47,9 @@
 
 .artifacts-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   position: relative;
-  height: calc(100% - 53px);
   background: var(--bg-card);
 }
 
