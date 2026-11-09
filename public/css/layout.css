@@ -858,3 +858,205 @@ input:checked + .slider:before {
 .rules-editor-textarea:focus {
   border-color: var(--accent-indigo);
 }
+
+/* ── Antigravity God Plugins & MCP Marketplace Grid ── */
+.plugin-category-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+}
+
+.plugin-category-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.plugin-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.plugin-card {
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.16s ease;
+}
+
+.plugin-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.plugin-card.active {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(6, 182, 212, 0.04));
+}
+
+.plugin-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.plugin-title-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plugin-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.plugin-title-block strong {
+  font-size: 13.5px;
+  color: #fff;
+  display: block;
+}
+
+.plugin-author-badge {
+  font-size: 10px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+}
+
+.plugin-desc {
+  font-size: 11.5px;
+  color: var(--ink-secondary);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.plugin-tools-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.plugin-tool-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-hairline);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--accent-cyan);
+}
+
+.plugin-auth-box {
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.plugin-auth-box input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #060810;
+  border: 1px solid var(--border-hairline);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+}
+
+.plugin-auth-box input:focus {
+  border-color: var(--accent-indigo);
+}
+
+/* ── Custom MCP Server Card & Form ── */
+.custom-mcp-form-card {
+  padding: 16px;
+  border-radius: var(--r-md);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.custom-mcp-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.custom-mcp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-hairline);
+  gap: 10px;
+}
+
+.custom-mcp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.custom-mcp-info strong {
+  font-size: 13px;
+  color: #fff;
+}
+
+.custom-mcp-info span {
+  font-size: 11px;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+}
+
+.delete-btn-ghost {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.14s ease;
+}
+
+.delete-btn-ghost:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ── Rules Preset Chips ── */
+.rules-preset-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 10px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.rules-preset-row::-webkit-scrollbar {
+  display: none;
+}

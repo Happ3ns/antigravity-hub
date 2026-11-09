@@ -378,73 +378,110 @@
     </div>
   </dialog>
 
-  <!-- Customizations Studio Modal (Rules, Skills, MCP Servers) -->
-  <dialog class="settings-modal" id="customizationsModal" style="max-width: 580px;">
+  <!-- Customizations & MCP Plugins Marketplace Studio -->
+  <dialog class="settings-modal" id="customizationsModal" style="max-width: 680px; width: 95vw;">
     <div class="modal-card">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:8px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--accent-indigo)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          <h3>Antigravity Customizations Studio</h3>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--accent-indigo)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          <div>
+            <h3 style="font-size:16.5px;">Antigravity Extensions &amp; Marketplace</h3>
+            <span style="font-size:11px; color:var(--ink-muted);">God Plugins, Custom MCP Servers, Rules &amp; Skills</span>
+          </div>
         </div>
         <button class="icon-btn-ghost" id="closeCustomizationsModalBtn">✕</button>
       </div>
 
-      <!-- Customization Tabs -->
-      <div class="artifacts-tabs" style="margin-bottom:16px;">
-        <button class="art-tab active" data-cust-tab="rules">Rules (AGENTS.md)</button>
+      <!-- Studio Navigation Tabs -->
+      <div class="artifacts-tabs" style="margin-bottom:14px; overflow-x:auto;">
+        <button class="art-tab active" data-cust-tab="plugins">Plugins &amp; MCP</button>
+        <button class="art-tab" data-cust-tab="add-mcp">+ Add Custom MCP</button>
         <button class="art-tab" data-cust-tab="skills">Skills Directory</button>
-        <button class="art-tab" data-cust-tab="mcp">MCP &amp; Plugins</button>
-        <button class="art-tab" data-cust-tab="appearance">Keyboard &amp; Theme</button>
+        <button class="art-tab" data-cust-tab="rules">Rules (AGENTS.md)</button>
+        <button class="art-tab" data-cust-tab="appearance">Theme &amp; Keyboard</button>
       </div>
 
-      <!-- Tab 1: Rules Editor -->
-      <div class="cust-tab-panel" id="custTabRules">
-        <p style="font-size:12px; color:var(--ink-secondary); margin-bottom:8px;">System rules define Antigravity's persistent memory, tone, and behavioral constraints:</p>
-        <textarea class="rules-editor-textarea" id="rulesEditorTextarea" spellcheck="false"></textarea>
+      <!-- Tab 1: God Plugins & MCP Catalog -->
+      <div class="cust-tab-panel" id="custTabPlugins">
+        <div class="plugin-category-bar" id="pluginCategoryBar">
+          <button class="chip-btn active" data-cat="all">All (10)</button>
+          <button class="chip-btn" data-cat="Design">Design</button>
+          <button class="chip-btn" data-cat="Productivity">Productivity</button>
+          <button class="chip-btn" data-cat="Backend">Backend</button>
+          <button class="chip-btn" data-cat="Developer Tools">Developer Tools</button>
+          <button class="chip-btn" data-cat="Research">Research</button>
+        </div>
+        <div class="plugin-market-grid" id="pluginMarketGrid"></div>
       </div>
 
-      <!-- Tab 2: Skills Directory -->
-      <div class="cust-tab-panel hidden" id="custTabSkills">
-        <div id="skillsListContainer" style="display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto;"></div>
-      </div>
-
-      <!-- Tab 3: MCP & Plugins -->
-      <div class="cust-tab-panel hidden" id="custTabMcp">
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <div class="skill-card-item">
-            <div class="skill-info">
-              <span class="skill-icon-box">🌐</span>
-              <div>
-                <strong>Google Web Search MCP</strong>
-                <p style="font-size:11px; color:var(--ink-secondary);">Live web search, citation generation, and documentation lookup.</p>
-              </div>
+      <!-- Tab 2: Connect Custom MCP Server -->
+      <div class="cust-tab-panel hidden" id="custTabAddMcp">
+        <div class="custom-mcp-form-card">
+          <strong style="color:#fff; font-size:13.5px;">Connect Any MCP Server (SSE / HTTP / Spec)</strong>
+          <p style="font-size:11.5px; color:var(--ink-secondary);">Link your private MCP servers to give iPad Antigravity full access to custom tools, databases, and APIs.</p>
+          <div class="custom-mcp-form-grid">
+            <div class="config-field">
+              <label>Server Identifier</label>
+              <input type="text" id="mcpServerNameInput" placeholder="e.g. internal-db-mcp">
             </div>
-            <span class="version-badge" style="background:rgba(16,185,129,0.15); color:#a7f3d0; border-color:rgba(16,185,129,0.3);">Connected</span>
+            <div class="config-field">
+              <label>Transport Protocol</label>
+              <select class="model-select" id="mcpTransportSelect" style="padding:10px 12px;">
+                <option value="sse">Server-Sent Events (SSE)</option>
+                <option value="http">HTTP Streaming</option>
+                <option value="stdio">Cloud stdio Agent Bridge</option>
+              </select>
+            </div>
           </div>
-          <div class="skill-card-item">
-            <div class="skill-info">
-              <span class="skill-icon-box">💻</span>
-              <div>
-                <strong>GitHub REST API MCP</strong>
-                <p style="font-size:11px; color:var(--ink-secondary);">Reads Happ3ns repositories, explores file trees, and fetches code.</p>
-              </div>
-            </div>
-            <span class="version-badge" style="background:rgba(16,185,129,0.15); color:#a7f3d0; border-color:rgba(16,185,129,0.3);">Connected</span>
+          <div class="config-field">
+            <label>Server Endpoint URL</label>
+            <input type="text" id="mcpEndpointInput" placeholder="https://mcp.your-domain.com/sse">
           </div>
-          <div class="skill-card-item">
-            <div class="skill-info">
-              <span class="skill-icon-box">📐</span>
-              <div>
-                <strong>KaTeX Math Engine</strong>
-                <p style="font-size:11px; color:var(--ink-secondary);">Mathematical typography renderer for complex integrals and vectors.</p>
-              </div>
-            </div>
-            <span class="version-badge" style="background:rgba(16,185,129,0.15); color:#a7f3d0; border-color:rgba(16,185,129,0.3);">Active</span>
+          <div class="config-field">
+            <label>Authentication Header / Bearer Token (Optional)</label>
+            <input type="password" id="mcpAuthInput" placeholder="Bearer eyJhbGciOi...">
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+            <button class="btn-primary" id="saveCustomMcpBtn">+ Add &amp; Discover Tools</button>
           </div>
         </div>
+
+        <strong style="color:var(--ink-secondary); font-size:12px; display:block; margin-bottom:8px;">Connected Custom MCP Endpoints:</strong>
+        <div id="customMcpList" style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto;"></div>
       </div>
 
-      <!-- Tab 4: Keyboard & Theme Appearance -->
+      <!-- Tab 3: Skills Directory & Creator -->
+      <div class="cust-tab-panel hidden" id="custTabSkills">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-size:12px; color:var(--ink-secondary);">Specialized Agent Toolkits &amp; Prompts:</span>
+          <button class="btn-primary" id="newSkillToggleBtn" style="padding:4px 10px; font-size:11px;">+ Create Skill</button>
+        </div>
+
+        <div id="newSkillForm" class="hidden" style="background:#090d18; border:1px solid var(--border-subtle); border-radius:10px; padding:12px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
+          <div class="custom-mcp-form-grid">
+            <input type="text" id="newSkillNameInput" placeholder="Skill Name (e.g. Physics Prover)" style="padding:8px; background:#060810; border:1px solid var(--border-hairline); border-radius:6px; color:#fff; font-size:12px;">
+            <input type="text" id="newSkillIconInput" placeholder="Emoji Icon (e.g. ⚡)" style="padding:8px; background:#060810; border:1px solid var(--border-hairline); border-radius:6px; color:#fff; font-size:12px;">
+          </div>
+          <input type="text" id="newSkillDescInput" placeholder="Brief description of when Antigravity should use this skill" style="padding:8px; background:#060810; border:1px solid var(--border-hairline); border-radius:6px; color:#fff; font-size:12px;">
+          <button class="btn-primary" id="submitCreateSkillBtn" style="align-self:flex-end; padding:4px 12px; font-size:11px;">Save Skill</button>
+        </div>
+
+        <div id="skillsListContainer" style="display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto;"></div>
+      </div>
+
+      <!-- Tab 4: Rules (AGENTS.md) & Presets -->
+      <div class="cust-tab-panel hidden" id="custTabRules">
+        <div class="rules-preset-row">
+          <button class="chip-btn rules-preset-btn" data-preset="singapore">🇸🇬 Singapore Admissions</button>
+          <button class="chip-btn rules-preset-btn" data-preset="jee">🧪 JEE Advanced 99%</button>
+          <button class="chip-btn rules-preset-btn" data-preset="architect">💻 Full-Stack Architect</button>
+          <button class="chip-btn rules-preset-btn" data-preset="minimal">⚡ Minimalist Pair Programmer</button>
+        </div>
+        <p style="font-size:11.5px; color:var(--ink-secondary); margin-bottom:8px;">System rules define Antigravity's persistent memory, tone, and behavioral constraints:</p>
+        <textarea class="rules-editor-textarea" id="rulesEditorTextarea" spellcheck="false" style="height:260px;"></textarea>
+      </div>
+
+      <!-- Tab 5: Keyboard & Theme Appearance -->
       <div class="cust-tab-panel hidden" id="custTabAppearance">
         <div style="display:flex; flex-direction:column; gap:16px;">
           <div class="config-field">

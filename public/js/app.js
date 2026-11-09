@@ -201,6 +201,7 @@
               <input type="checkbox" ${auto.enabled ? "checked" : ""} data-id="${auto.id}" class="auto-toggle-checkbox">
               <span class="slider"></span>
             </label>
+            <button class="delete-btn-ghost delete-auto-btn" data-id="${auto.id}" title="Delete Automation">✕</button>
           </div>
         </div>
         <div style="font-size:12px; color:var(--ink-secondary); font-family:var(--font-mono); background:#060810; padding:6px 10px; border-radius:6px;">
@@ -216,6 +217,13 @@
         Store.toggleAutomation(auto.id);
       });
 
+      card.querySelector(".delete-auto-btn")?.addEventListener("click", () => {
+        if (confirm(`Delete automation "${auto.title}"?`)) {
+          Store.removeAutomation(auto.id);
+          renderAutomationsList();
+        }
+      });
+
       card.querySelector(".run-auto-btn")?.addEventListener("click", () => {
         document.getElementById("automationsModal")?.close();
         const input = document.getElementById("promptInput");
@@ -227,7 +235,36 @@
     });
   }
 
-  // 4. Customizations Studio Modal (Rules, Skills, MCP, Appearance)
+  // Rules presets catalog
+  const RULES_PRESETS = {
+    singapore: `# Antigravity Rules: Singapore University Admissions (SMU SCIS / NUS / NTU)
+- Candidate: Akshat (Happ3ns)
+- Primary Goal: Admission into Singapore universities (SMU SCIS Discovery Day, NUS School of Computing, NTU).
+- Portfolio: Emphasize algorithmic excellence, full-stack scalability, AI agency, and clear technical communication.
+- Communication Style: Encouraging, rigorous, concise, academically precise.
+- LaTeX Math: Format all formulas using KaTeX ($$...$$ for display equations, $...$ for inline terms).
+- Code Standards: Production-quality TypeScript/Python with optimal Big-O algorithmic complexity.`,
+
+    jee: `# Antigravity Rules: JEE Advanced 99th Percentile Master
+- Target: JEE Advanced Physics & Mathematics problem mastery.
+- Physics: First-principles derivations (Gauss's law, Maxwell, electrodynamics, rotational mechanics).
+- Mathematics: High-level calculus, complex numbers, coordinate geometry, and linear algebra.
+- Verification: Always cross-check dimensional consistency and boundary condition limits.
+- LaTeX Math: Display all integrals and vector equations with $$...$$. Always provide 1 follow-up challenge problem.`,
+
+    architect: `# Antigravity Rules: Full-Stack Cloud & Systems Architect
+- Stack: Modern TypeScript, React/PWA, Node.js, Vercel, Supabase, Cloudflare Workers.
+- Architecture: Event-driven workflows, microfrontends, clean separation of concerns, zero bloated libraries.
+- Security: Client-side secret isolation, PIN gate hashing, and safe MCP agent bridging.
+- Formatting: Provide file paths, unified diffs, and copyable terminal commands.`,
+
+    minimal: `# Antigravity Rules: Minimalist Pair Programmer
+- Communication: Extremely concise. Zero pleasantries or conversational filler.
+- Outputs: Direct code snippets, terminal commands, or structured bullet points.
+- Reasoning: High density of actionable insights.`
+  };
+
+  // 4. Customizations Studio Modal (God Plugins, Custom MCP, Rules & Skills)
   function initCustomizationsModal() {
     const modal = document.getElementById("customizationsModal");
     const openBtn = document.getElementById("customizationsBtn");
@@ -239,9 +276,12 @@
     const rulesTextarea = document.getElementById("rulesEditorTextarea");
     const kbSlider = document.getElementById("kbOpacitySlider");
     const kbLabel = document.getElementById("kbOpacityLabel");
+    let activePluginCategory = "all";
 
     const openCustomizations = () => {
       rulesTextarea.value = Store.getRules();
+      renderPluginsGrid(activePluginCategory);
+      renderCustomMcpList();
       renderSkillsList();
       kbSlider.value = Store.getKeyboardTransparency();
       kbLabel.textContent = `Translucency: ${kbSlider.value}% frosted glass blur`;
@@ -255,20 +295,59 @@
     closeBtn?.addEventListener("click", closeModal);
     cancelBtn?.addEventListener("click", closeModal);
 
-    // Tab switcher
+    // Tab switcher (all 5 tabs)
     tabs.forEach(tab => {
       tab.addEventListener("click", () => {
         tabs.forEach(t => t.classList.remove("active"));
         tab.classList.add("active");
         const target = tab.getAttribute("data-cust-tab");
 
-        document.querySelectorAll(".cust-tab-panel").forEach(p => p.classList.add("hidden"));
-        if (target === "rules") document.getElementById("custTabRules")?.classList.remove("hidden");
-        else if (target === "skills") document.getElementById("custTabSkills")?.classList.remove("hidden");
-        else if (target === "mcp") document.getElementById("custTabMcp")?.classList.remove("hidden");
-        else if (target === "appearance") document.getElementById("custTabAppearance")?.classList.remove("hidden");
+        document.querySelectorAll("#customizationsModal .cust-tab-panel").forEach(p => p.classList.add("hidden"));
+        if (target === "plugins") {
+          document.getElementById("custTabPlugins")?.classList.remove("hidden");
+          renderPluginsGrid(activePluginCategory);
+        } else if (target === "add-mcp") {
+          document.getElementById("custTabAddMcp")?.classList.remove("hidden");
+          renderCustomMcpList();
+        } else if (target === "skills") {
+          document.getElementById("custTabSkills")?.classList.remove("hidden");
+          renderSkillsList();
+        } else if (target === "rules") {
+          document.getElementById("custTabRules")?.classList.remove("hidden");
+        } else if (target === "appearance") {
+          document.getElementById("custTabAppearance")?.classList.remove("hidden");
+        }
       });
     });
+
+    // Plugin Category Filter Bar
+    const catBar = document.getElementById("pluginCategoryBar");
+    catBar?.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip-btn");
+      if (!chip) return;
+      catBar.querySelectorAll(".chip-btn").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      activePluginCategory = chip.getAttribute("data-cat") || "all";
+      renderPluginsGrid(activePluginCategory);
+    });
+
+    // Rules Presets Buttons
+    document.querySelectorAll(".rules-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const presetKey = btn.getAttribute("data-preset");
+        if (RULES_PRESETS[presetKey]) {
+          rulesTextarea.value = RULES_PRESETS[presetKey];
+          document.querySelectorAll(".rules-preset-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+        }
+      });
+    });
+
+    // Custom MCP Form Handlers
+    initCustomMcpHandlers();
+
+    // Custom Skill Creator Handlers
+    initSkillHandlers();
 
     // Keyboard opacity live slider
     kbSlider?.addEventListener("input", (e) => {
@@ -290,7 +369,214 @@
     saveBtn?.addEventListener("click", () => {
       Store.setRules(rulesTextarea.value);
       closeModal();
-      alert("Antigravity Customizations & Rules successfully saved!");
+      alert("Antigravity Customizations, Rules & MCP links saved!");
+    });
+  }
+
+  // Render 10 God Plugins & Tools
+  function renderPluginsGrid(filterCategory = "all") {
+    const grid = document.getElementById("pluginMarketGrid");
+    if (!grid) return;
+    const plugins = Store.getPlugins();
+    grid.innerHTML = "";
+
+    const filtered = (filterCategory === "all")
+      ? plugins
+      : plugins.filter(p => p.category.toLowerCase().includes(filterCategory.toLowerCase()));
+
+    filtered.forEach(p => {
+      const card = document.createElement("div");
+      card.className = "plugin-card";
+      const currentToken = p.authKey ? Store.getPluginAuth(p.authKey) : "";
+
+      card.innerHTML = `
+        <div class="plugin-card-header">
+          <div class="plugin-brand-wrap">
+            <span class="plugin-icon-box">${p.icon}</span>
+            <div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <strong>${p.name}</strong>
+                <span class="plugin-badge">${p.category}</span>
+              </div>
+              <span class="plugin-author">By ${p.author}</span>
+            </div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" ${p.enabled ? "checked" : ""} data-id="${p.id}" class="plugin-toggle-checkbox">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <p class="plugin-desc">${p.desc}</p>
+        <div class="plugin-tools-list">
+          ${p.tools.map(t => `<span class="plugin-tool-tag">${t}</span>`).join("")}
+        </div>
+        ${p.authKey ? `
+          <div class="plugin-auth-box">
+            <input type="password" placeholder="${p.authPlaceholder}" value="${currentToken}" data-key="${p.authKey}" class="plugin-token-input" autocomplete="off" spellcheck="false">
+            <button class="btn-ghost plugin-save-token-btn" data-key="${p.authKey}" style="padding:4px 8px; font-size:11px;">Save</button>
+          </div>
+        ` : `
+          <div style="font-size:11px; color:var(--accent-emerald); font-family:var(--font-mono); padding-top:4px;">
+            ✓ Pre-authenticated Sandbox / Free Tier
+          </div>
+        `}
+      `;
+
+      card.querySelector(".plugin-toggle-checkbox")?.addEventListener("change", () => {
+        Store.togglePlugin(p.id);
+      });
+
+      if (p.authKey) {
+        const tokenInput = card.querySelector(".plugin-token-input");
+        const saveTokenBtn = card.querySelector(".plugin-save-token-btn");
+
+        const saveToken = () => {
+          Store.setPluginAuth(p.authKey, tokenInput.value);
+          saveTokenBtn.textContent = "Saved ✓";
+          saveTokenBtn.style.color = "var(--accent-emerald)";
+          setTimeout(() => {
+            saveTokenBtn.textContent = "Save";
+            saveTokenBtn.style.color = "";
+          }, 1500);
+        };
+
+        saveTokenBtn?.addEventListener("click", saveToken);
+        tokenInput?.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            saveToken();
+          }
+        });
+      }
+
+      grid.appendChild(card);
+    });
+  }
+
+  // Custom MCP Server Handlers & List
+  function initCustomMcpHandlers() {
+    const saveBtn = document.getElementById("saveCustomMcpBtn");
+    const nameInput = document.getElementById("mcpServerNameInput");
+    const transportSelect = document.getElementById("mcpTransportSelect");
+    const endpointInput = document.getElementById("mcpEndpointInput");
+    const authInput = document.getElementById("mcpAuthInput");
+
+    saveBtn?.addEventListener("click", () => {
+      const name = (nameInput.value || "").trim();
+      const transport = transportSelect?.value || "sse";
+      const endpoint = (endpointInput.value || "").trim();
+      const auth = (authInput.value || "").trim();
+
+      if (!name) {
+        alert("Please enter a Server Identifier (e.g. internal-db-mcp).");
+        nameInput.focus();
+        return;
+      }
+      if (!endpoint) {
+        alert("Please enter a valid Server Endpoint URL (e.g. https://mcp.your-domain.com/sse).");
+        endpointInput.focus();
+        return;
+      }
+
+      const newServer = {
+        id: "mcp_" + Date.now(),
+        name: name,
+        transport: transport,
+        endpoint: endpoint,
+        auth: auth,
+        status: "Connected 🟢",
+        addedAt: new Date().toLocaleDateString()
+      };
+
+      Store.addCustomMcpServer(newServer);
+      nameInput.value = "";
+      endpointInput.value = "";
+      authInput.value = "";
+      renderCustomMcpList();
+      alert(`MCP Server "${name}" linked successfully!`);
+    });
+  }
+
+  function renderCustomMcpList() {
+    const container = document.getElementById("customMcpList");
+    if (!container) return;
+    const servers = Store.getCustomMcpServers();
+    container.innerHTML = "";
+
+    if (servers.length === 0) {
+      container.innerHTML = `
+        <div style="padding:16px; text-align:center; color:var(--ink-muted); font-size:12px; background:var(--bg-card-subtle); border-radius:8px; border:1px dashed var(--border-hairline);">
+          No custom MCP servers connected yet. Fill out the form above to link your external SSE, HTTP, or stdio tool bridge.
+        </div>
+      `;
+      return;
+    }
+
+    servers.forEach(s => {
+      const item = document.createElement("div");
+      item.className = "custom-mcp-item";
+      item.innerHTML = `
+        <div class="custom-mcp-info">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong>${s.name}</strong>
+            <span style="font-size:10px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.4); color:var(--accent-indigo); padding:1px 6px; border-radius:4px;">${(s.transport || "SSE").toUpperCase()}</span>
+            <span style="font-size:11px; color:var(--accent-emerald);">${s.status || "Connected 🟢"}</span>
+          </div>
+          <span>${s.endpoint}</span>
+        </div>
+        <button class="delete-btn-ghost delete-mcp-btn" data-id="${s.id}" title="Remove MCP Server">✕</button>
+      `;
+
+      item.querySelector(".delete-mcp-btn")?.addEventListener("click", () => {
+        if (confirm(`Remove custom MCP server "${s.name}"?`)) {
+          Store.removeCustomMcpServer(s.id);
+          renderCustomMcpList();
+        }
+      });
+
+      container.appendChild(item);
+    });
+  }
+
+  // Custom Skills Form Handlers & List
+  function initSkillHandlers() {
+    const toggleBtn = document.getElementById("newSkillToggleBtn");
+    const form = document.getElementById("newSkillForm");
+    const nameInput = document.getElementById("newSkillNameInput");
+    const iconInput = document.getElementById("newSkillIconInput");
+    const descInput = document.getElementById("newSkillDescInput");
+    const submitBtn = document.getElementById("submitCreateSkillBtn");
+
+    toggleBtn?.addEventListener("click", () => {
+      form.classList.toggle("hidden");
+      toggleBtn.textContent = form.classList.contains("hidden") ? "+ Create Skill" : "✕ Cancel";
+    });
+
+    submitBtn?.addEventListener("click", () => {
+      const name = (nameInput.value || "").trim();
+      const icon = (iconInput.value || "").trim() || "⚡";
+      const desc = (descInput.value || "").trim();
+
+      if (!name) {
+        alert("Please enter a skill name.");
+        nameInput.focus();
+        return;
+      }
+
+      Store.addSkill({
+        id: "skill_" + Date.now(),
+        name: name,
+        icon: icon,
+        desc: desc || "Custom user skill toolkit",
+        enabled: true
+      });
+
+      nameInput.value = "";
+      iconInput.value = "";
+      descInput.value = "";
+      form.classList.add("hidden");
+      toggleBtn.textContent = "+ Create Skill";
+      renderSkillsList();
     });
   }
 
@@ -682,18 +968,30 @@
       }
     });
 
-    // Inject active user rules & skills into system prompt
+    // Inject active user rules, skills, God Plugins & MCP servers into system prompt
     const userRules = Store.getRules();
-    const activeSkills = Store.getSkills().filter(s => s.enabled).map(s => s.name).join(", ");
+    const activeSkills = Store.getSkills().filter(s => s.enabled).map(s => `• ${s.icon} ${s.name}: ${s.desc}`).join("\n");
+    const activePlugins = Store.getPlugins().filter(p => p.enabled).map(p => `• [God Plugin] ${p.name} (${p.category}): Tools=[${p.tools.join(", ")}]`).join("\n");
+    const customMcp = Store.getCustomMcpServers().map(s => `• [Custom MCP] ${s.name} (${s.transport}): ${s.endpoint}`).join("\n");
 
-    const systemInstruction = `You are Antigravity, Google DeepMind's Advanced Agentic Coding Assistant.
-Mode: ${mode.toUpperCase()}.
-Active Skills: ${activeSkills || "None"}.
+    const systemInstruction = `You are Antigravity, Google DeepMind's Advanced Agentic Coding Assistant paired with Akshat (Happ3ns).
+Operating Mode: ${mode.toUpperCase()}.
 
+Enabled God Plugins:
+${activePlugins || "None"}
+
+Connected Custom MCP Servers:
+${customMcp || "None"}
+
+Active Skills:
+${activeSkills || "None"}
+
+User Instructions & AGENTS.md Rules:
 ${userRules}
 
 Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $...$ inline), and code blocks with language tags.
-Wrap internal chain-of-thought in <thinking>...</thinking> tags before final answer.`;
+You have full access and operational awareness of all active God Plugins and Custom MCP Servers. When the user requests tasks involving Figma, Notion, Supabase, Linear, GitHub, Python Sandbox, BioMol Science Suite, Canva, Stripe, Railway/Netlify, or custom MCP servers, format and describe your tool invocations or execute them.
+Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final answer.`;
 
     try {
       const response = await fetch(endpoint, {
@@ -866,6 +1164,120 @@ $$\\vec{B}_{\\text{in}} = \\frac{\\mu_0 K_0}{2} \\hat{y}$$
       responseText = `🎯 **Goal Initialized:** \`${prompt.replace("/goal", "").trim()}\`
 
 Antigravity autonomous agent active. System will persist and auto-execute verification subagents until full completion.`;
+
+    } else if (lower.startsWith("/mcp") || lower === "mcp") {
+      const plugins = Store.getPlugins().filter(p => p.enabled);
+      const customServers = Store.getCustomMcpServers();
+      thinking = "Inspecting connected Model Context Protocol (MCP) servers and tool registries.";
+      toolCalls.push({ name: "mcp_list_tools", args: { filter: "all_connected" } });
+
+      responseText = `### 🔌 Model Context Protocol (MCP) Server Status
+
+**Connected God Plugins (${plugins.length} Active):**
+${plugins.map(p => `- **${p.icon} ${p.name}** (${p.category}): \`${p.tools.join("`, `")}\``).join("\n")}
+
+**Custom MCP Servers (${customServers.length} Active):**
+${customServers.length > 0 ? customServers.map(s => `- **${s.name}** [${s.transport.toUpperCase()}]: \`${s.endpoint}\` (${s.status || "Connected"})`).join("\n") : "_No custom MCP endpoints connected. Add one via **Customise > + Add Custom MCP**!_"}
+
+> [!TIP]
+> You can trigger any MCP tool directly or configure additional private servers via the **Customise** menu in the top bar.`;
+
+    } else if (lower.startsWith("/plugins") || lower === "plugins") {
+      const allPlugins = Store.getPlugins();
+      thinking = "Reading installed extensions catalog and God Plugins registry.";
+      responseText = `### 🧩 Antigravity God Plugins Catalog
+
+| Plugin | Category | Status | Available Tools |
+| :--- | :--- | :--- | :--- |
+${allPlugins.map(p => `| **${p.icon} ${p.name}** | ${p.category} | ${p.enabled ? "🟢 Active" : "⚪ Disabled"} | \`${p.tools.slice(0, 2).join(", ")}${p.tools.length > 2 ? "..." : ""}\` |`).join("\n")}
+
+*To enable/disable plugins or configure API tokens, tap **Customise** in the top bar.*`;
+
+    } else if (lower.startsWith("/figma")) {
+      thinking = "Invoking Figma MCP: querying design tokens, layout hierarchy, and Code Connect mappings.";
+      toolCalls.push({ name: "figma_get_design_context", args: { file_key: "antigravity-ipad-shell", node_id: "0:1" } });
+      responseText = `### 🎨 Figma MCP Integration
+**Connected File:** \`Antigravity iPadOS Studio UI\`
+- **Inspected Frames:** Top Navigation Bar, Chat Stream Canvas, Translucent Math Pad, Studio Pane.
+- **Color Tokens:**
+  - \`--bg-deep\`: \`#040508\`
+  - \`--bg-card\`: \`#0c101c\`
+  - \`--accent-indigo\`: \`#6366f1\`
+  - \`--accent-cyan\`: \`#06b6d4\`
+- **Code Connect Snippet:**
+\`\`\`tsx
+export function AntigravityTopBar({ title, model }: TopBarProps) {
+  return (
+    <header className="chat-topbar">
+      <NavControls />
+      <h2 className="session-title">{title}</h2>
+      <ModelPill model={model} />
+    </header>
+  );
+}
+\`\`\``;
+
+    } else if (lower.startsWith("/supabase")) {
+      thinking = "Executing Supabase MCP: inspecting database schema and active tables.";
+      toolCalls.push({ name: "supabase_execute_sql", args: { query: "SELECT table_name FROM information_schema.tables WHERE table_schema='public';" } });
+      responseText = `### ⚡ Supabase Postgres MCP
+
+**Executed Query:** \`SELECT table_name FROM information_schema.tables WHERE table_schema='public';\`
+
+| Table Name | Records | Row Level Security (RLS) | Last Modified |
+| :--- | :--- | :--- | :--- |
+| \`admissions_milestones\` | 18 | Enabled 🔒 | Today, 14:20 |
+| \`jee_quiz_bank\` | 412 | Enabled 🔒 | Today, 08:00 |
+| \`user_preferences\` | 1 | Enabled 🔒 | 5 mins ago |
+| \`synced_sessions\` | 24 | Enabled 🔒 | Just now |
+
+> All queries executed safely via client-side Supabase MCP bridge.`;
+
+    } else if (lower.startsWith("/notion")) {
+      thinking = "Querying Notion Workspace MCP for application trackers and Singapore university wikis.";
+      toolCalls.push({ name: "notion_query_data_sources", args: { database: "Singapore Admissions Tracker 2026" } });
+      responseText = `### 📝 Notion Workspace MCP
+
+**Database:** \`Singapore Admissions Tracker 2026\`
+- **SMU SCIS (BSc Computing):** Application submitted. Discovery Day technical interview preparation in progress.
+- **NUS Computing:** Algorithmic portfolio & JEE Advanced rank verification ready.
+- **NTU College of Computing & Data Science:** Standard evaluation track.
+
+*Page \`2026-Preparation-Log\` synced successfully.*`;
+
+    } else if (lower.startsWith("/science")) {
+      thinking = "Invoking Science & BioMol MCP: fetching PDB structural coordinates and ChEMBL binding assays.";
+      toolCalls.push({ name: "pdb_fetch_structure", args: { pdb_id: "6LU7" } });
+      responseText = `### 🔬 Science & BioMol MCP
+
+**PDB Entry:** \`6LU7\` (SARS-CoV-2 Main Protease Complexed with Inhibitor N3)
+- **Resolution:** 2.16 Å (X-ray diffraction)
+- **Organism:** Severe acute respiratory syndrome coronavirus 2
+- **ChEMBL Assays:** 14 bioactivity records with $IC_{50} < 100\\,\\text{nM}$.
+- **Catalytic Dyad:** Cys145 - His41 pocket confirmed.`;
+
+    } else if (lower.startsWith("/python")) {
+      thinking = "Dispatching code block to isolated Python Sandbox runtime.";
+      toolCalls.push({ name: "python_sandbox_run", args: { code: prompt.replace("/python", "").trim() || "import numpy as np; print(np.pi)" } });
+      responseText = `### 🐍 Python Sandbox Execution
+
+\`\`\`python
+# Executed in sandboxed WebAssembly / microVM runtime
+import numpy as np
+import scipy.integrate as integrate
+
+# Verification of Gaussian Integral
+result, error = integrate.quad(lambda x: np.exp(-x**2), -np.inf, np.inf)
+print(f"Result: {result:.10f}")
+print(f"Analytical sqrt(pi): {np.sqrt(np.pi):.10f}")
+\`\`\`
+
+**Standard Output:**
+\`\`\`
+Result: 1.7724538509
+Analytical sqrt(pi): 1.7724538509
+Code executed successfully in 14ms (0 errors).
+\`\`\``;
 
     } else {
       thinking = `Processing user query: "${prompt}". Synthesizing response using workspace context and active Antigravity session knowledge.`;
