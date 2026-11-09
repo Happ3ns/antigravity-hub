@@ -1,0 +1,159 @@
+/* ── Artifacts Split-View Pane & Live Web Preview ── */
+
+.artifacts-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-hairline);
+  background: rgba(11, 14, 23, 0.7);
+  backdrop-filter: var(--blur-glass);
+}
+
+.artifacts-tabs {
+  display: flex;
+  background: #080a10;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.art-tab {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.art-tab.active {
+  background: #192033;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.artifacts-content {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  height: calc(100% - 53px);
+}
+
+.art-panel {
+  display: none;
+  height: 100%;
+}
+
+.art-panel.active {
+  display: block;
+}
+
+/* Tab 1: Artifact Body */
+.artifact-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+.artifact-empty-state p {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  margin-top: 12px;
+}
+
+.artifact-empty-state span {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
+
+.artifact-body {
+  padding: 24px 20px 60px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-primary);
+}
+
+.artifact-body h1, .artifact-body h2, .artifact-body h3 {
+  color: #fff;
+  margin: 18px 0 10px;
+  letter-spacing: -0.02em;
+}
+
+.artifact-body h1 { font-size: 20px; font-weight: 800; }
+.artifact-body h2 { font-size: 17px; font-weight: 700; border-bottom: 1px solid var(--border-hairline); padding-bottom: 6px; }
+.artifact-body h3 { font-size: 15px; font-weight: 600; }
+
+.artifact-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13px;
+}
+
+.artifact-body th, .artifact-body td {
+  border: 1px solid var(--border-hairline);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.artifact-body th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+}
+
+/* Tab 2: Live Preview Frame */
+#tabPreview {
+  width: 100%;
+  height: 100%;
+}
+
+#previewFrame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000;
+}
+
+/* Tab 3: Repo Files Tree */
+.repo-tree {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tree-node {
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-secondary);
+  transition: all 0.14s ease;
+}
+
+.tree-node:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.tree-icon {
+  font-size: 14px;
+}

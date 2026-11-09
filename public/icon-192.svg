@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0e17"/>
+      <stop offset="100%" stop-color="#040508"/>
+    </linearGradient>
+    <linearGradient id="primaryGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <rect width="190" height="190" x="1" y="1" rx="41" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+  <g transform="translate(96, 96)">
+    <circle r="16" fill="url(#primaryGlow)"/>
+    <ellipse rx="56" ry="24" fill="none" stroke="url(#primaryGlow)" stroke-width="4" transform="rotate(30)"/>
+    <ellipse rx="56" ry="24" fill="none" stroke="url(#primaryGlow)" stroke-width="4" transform="rotate(-30)"/>
+    <ellipse rx="56" ry="24" fill="none" stroke="url(#primaryGlow)" stroke-width="4" transform="rotate(90)"/>
+  </g>
+</svg>

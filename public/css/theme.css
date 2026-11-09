@@ -1,0 +1,134 @@
+/* ── Spatial Obsidian 2026 Design Tokens ── */
+:root {
+  /* Obsidian Surfaces */
+  --bg-main: #07080c;
+  --bg-sidebar: #0b0e17;
+  --bg-card: #0f131f;
+  --bg-card-subtle: #141928;
+  --bg-card-hover: #192033;
+  --bg-input: rgba(15, 19, 31, 0.85);
+
+  /* Hairline Borders & Glass */
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.14);
+  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-focus: #6366f1;
+  --blur-glass: blur(24px) saturate(190%);
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Ink Hierarchy */
+  --ink-title: #ffffff;
+  --ink-primary: #f1f5f9;
+  --ink-secondary: #94a3b8;
+  --ink-muted: #64748b;
+
+  /* Accents */
+  --accent-indigo: #6366f1;
+  --accent-indigo-glow: rgba(99, 102, 241, 0.35);
+  --accent-cyan: #06b6d4;
+  --accent-cyan-glow: rgba(6, 182, 212, 0.3);
+  --accent-emerald: #10b981;
+  --accent-coral: #f43f5e;
+  --accent-amber: #f59e0b;
+
+  /* Radii */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-full: 9999px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-main);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient Canvas */
+#ambientCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+/* Common Brand Glyph */
+.brand-glyph-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #06b6d4, #6366f1);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+/* Buttons */
+.icon-btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-secondary);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  transition: all 0.16s ease;
+}
+
+.icon-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border-color: var(--border-hairline);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-hairline);
+  color: var(--ink-secondary);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  padding: 8px 18px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}

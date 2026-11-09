@@ -1,0 +1,21 @@
+{
+  "name": "antigravity-hub",
+  "version": "1.0.0",
+  "description": "Antigravity iPad Studio — 24/7 Cloud Agent Suite for iPadOS with thinking protocol, tool execution badges, artifacts split-view, and GitHub sync.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "sync": "node tools/sync.js"
+  },
+  "keywords": [
+    "antigravity",
+    "gemini",
+    "ipad",
+    "agent",
+    "pwa",
+    "ai-coding"
+  ],
+  "author": "Happ3ns",
+  "license": "MIT"
+}
