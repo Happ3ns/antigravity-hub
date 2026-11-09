@@ -433,6 +433,11 @@
       }
       if (badge) badge.textContent = "Cloud Ready";
     });
+
+    // Topbar Hard Reload (Cache Busting)
+    document.getElementById("hardRefreshBtn")?.addEventListener("click", () => {
+      window.location.replace(window.location.origin + window.location.pathname + "?ts=" + Date.now());
+    });
   }
 
   // 7. Model & Mode Selector
@@ -1096,12 +1101,15 @@ ${!Store.getApiKey() ? `> [!TIP]
     const canvas = document.getElementById("ambientCanvas");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let width = (canvas.width = window.innerWidth * dpr);
+    let height = (canvas.height = window.innerHeight * dpr);
+    ctx.scale(dpr, dpr);
 
     window.addEventListener("resize", () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+      width = canvas.width = window.innerWidth * dpr;
+      height = canvas.height = window.innerHeight * dpr;
+      ctx.scale(dpr, dpr);
     });
 
     const particles = [];
