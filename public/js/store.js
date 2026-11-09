@@ -8,13 +8,15 @@
     GEMINI_KEY: "ag_gemini_key",
     GITHUB_TOKEN: "ag_github_token",
     MODEL: "ag_active_model",
+    MODE: "ag_active_mode",
+    WEB_SEARCH: "ag_web_search",
+    COT: "ag_cot_enabled",
     SESSIONS: "ag_sessions_cache",
     ACTIVE_SESSION_ID: "ag_active_session_id"
   };
 
   const DEFAULT_PIN = "1234";
 
-  // Simple string hash
   function hash(str) {
     let h = 0;
     for (let i = 0; i < str.length; i++) {
@@ -54,7 +56,7 @@
     },
 
     setApiKey: function (key) {
-      localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, key.trim());
+      localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, (key || "").trim());
     },
 
     getGithubToken: function () {
@@ -62,15 +64,41 @@
     },
 
     setGithubToken: function (token) {
-      localStorage.setItem(STORAGE_KEYS.GITHUB_TOKEN, token.trim());
+      localStorage.setItem(STORAGE_KEYS.GITHUB_TOKEN, (token || "").trim());
     },
 
     getModel: function () {
-      return localStorage.getItem(STORAGE_KEYS.MODEL) || "gemini-2.5-thinking";
+      return localStorage.getItem(STORAGE_KEYS.MODEL) || "gemini-2.5-flash";
     },
 
     setModel: function (m) {
       localStorage.setItem(STORAGE_KEYS.MODEL, m);
+    },
+
+    getMode: function () {
+      return localStorage.getItem(STORAGE_KEYS.MODE) || "agentic";
+    },
+
+    setMode: function (m) {
+      localStorage.setItem(STORAGE_KEYS.MODE, m);
+    },
+
+    isWebSearchEnabled: function () {
+      const val = localStorage.getItem(STORAGE_KEYS.WEB_SEARCH);
+      return val === null ? true : val === "true";
+    },
+
+    setWebSearchEnabled: function (enabled) {
+      localStorage.setItem(STORAGE_KEYS.WEB_SEARCH, enabled ? "true" : "false");
+    },
+
+    isCotEnabled: function () {
+      const val = localStorage.getItem(STORAGE_KEYS.COT);
+      return val === null ? true : val === "true";
+    },
+
+    setCotEnabled: function (enabled) {
+      localStorage.setItem(STORAGE_KEYS.COT, enabled ? "true" : "false");
     },
 
     getSessions: function () {

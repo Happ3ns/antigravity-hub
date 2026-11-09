@@ -1,44 +1,57 @@
-/* ── Spatial Obsidian 2026 Design Tokens ── */
+/* ── Antigravity Studio 2026 Design Tokens ── */
 :root {
-  /* Obsidian Surfaces */
-  --bg-main: #07080c;
-  --bg-sidebar: #0b0e17;
-  --bg-card: #0f131f;
-  --bg-card-subtle: #141928;
-  --bg-card-hover: #192033;
-  --bg-input: rgba(15, 19, 31, 0.85);
+  /* Ultra-Deep Obsidian Surfaces */
+  --bg-main: #08090d;
+  --bg-sidebar: #0d0f16;
+  --bg-card: #121522;
+  --bg-card-subtle: #171b2d;
+  --bg-card-hover: #1c2238;
+  --bg-input: rgba(18, 21, 34, 0.88);
+  --bg-tertiary: #141827;
 
-  /* Hairline Borders & Glass */
+  /* Precision Borders & Frosted Glass */
   --border-hairline: rgba(255, 255, 255, 0.08);
   --border-subtle: rgba(255, 255, 255, 0.14);
-  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-hover: rgba(255, 255, 255, 0.25);
   --border-focus: #6366f1;
-  --blur-glass: blur(24px) saturate(190%);
+  --border-accent: rgba(99, 102, 241, 0.45);
+  --blur-glass: blur(28px) saturate(200%);
 
   /* Typography */
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
 
   /* Ink Hierarchy */
   --ink-title: #ffffff;
-  --ink-primary: #f1f5f9;
+  --ink-primary: #f8fafc;
   --ink-secondary: #94a3b8;
   --ink-muted: #64748b;
+  --ink-faint: #475569;
 
-  /* Accents */
+  /* Accents & Glows */
   --accent-indigo: #6366f1;
-  --accent-indigo-glow: rgba(99, 102, 241, 0.35);
+  --accent-indigo-light: #818cf8;
+  --accent-indigo-glow: rgba(99, 102, 241, 0.4);
   --accent-cyan: #06b6d4;
-  --accent-cyan-glow: rgba(6, 182, 212, 0.3);
+  --accent-cyan-glow: rgba(6, 182, 212, 0.35);
   --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.35);
   --accent-coral: #f43f5e;
   --accent-amber: #f59e0b;
+  --accent-purple: #a855f7;
 
   /* Radii */
-  --r-sm: 8px;
-  --r-md: 14px;
-  --r-lg: 20px;
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
   --r-full: 9999px;
+
+  /* Elevations */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.8);
+  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.25);
 }
 
 * {
@@ -55,11 +68,11 @@ html, body {
   background-color: var(--bg-main);
   color: var(--ink-primary);
   font-family: var(--font-sans);
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ambient Canvas */
+/* Ambient Canvas Background */
 #ambientCanvas {
   position: fixed;
   inset: 0;
@@ -67,23 +80,24 @@ html, body {
   height: 100vh;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
-/* Common Brand Glyph */
+/* Brand Glyph Spark */
 .brand-glyph-box {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #06b6d4, #6366f1);
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #06b6d4, #6366f1 60%, #a855f7);
   display: grid;
   place-items: center;
   color: #fff;
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 24px rgba(99, 102, 241, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
   flex-shrink: 0;
+  position: relative;
 }
 
-/* Buttons */
+/* Buttons & Interactive Elements */
 .icon-btn-ghost {
   background: transparent;
   border: 1px solid transparent;
@@ -92,11 +106,13 @@ html, body {
   padding: 6px 10px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: 13px;
-  transition: all 0.16s ease;
+  font-weight: 500;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .icon-btn-ghost:hover {
@@ -105,30 +121,36 @@ html, body {
   border-color: var(--border-hairline);
 }
 
-.btn-primary {
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+.icon-btn-ghost:active {
+  transform: scale(0.96);
+}
+
+.icon-btn-ghost.active {
+  background: var(--bg-card-subtle);
   color: #fff;
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 8px 18px;
-  border-radius: var(--r-md);
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  border-color: var(--border-subtle);
 }
 
-.btn-ghost {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-hairline);
-  color: var(--ink-secondary);
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  padding: 8px 18px;
-  border-radius: var(--r-md);
-  cursor: pointer;
+/* Custom Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Utility Hidden */
 .hidden {
   display: none !important;
 }
