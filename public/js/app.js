@@ -220,7 +220,7 @@
       let data = null;
       let serverSuccess = false;
       try {
-        const response = await fetch("/api/chat", {
+        const response = await fetch("api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -303,7 +303,7 @@
     let sessions = Store.getSessions();
     if (!sessions || sessions.length === 0) {
       try {
-        const res = await fetch("/data/synced-sessions.json");
+        const res = await fetch("data/synced-sessions.json");
         if (res.ok) {
           const synced = await res.json();
           if (Array.isArray(synced) && synced.length > 0) {
