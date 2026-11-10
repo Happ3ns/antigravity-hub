@@ -9,6 +9,10 @@
   const navHistory = [];
   let navHistoryIndex = -1;
   const inputUndoStack = [];
+  let pendingAttachments = [];
+  let currentRepoName = "Happ3ns/antigravity-hub";
+  let selectedRepoState = { repo: "Happ3ns/antigravity-hub", path: "", content: "" };
+  let reposCatalogLoaded = false;
 
   document.addEventListener("DOMContentLoaded", () => {
     initAmbientBackground();
@@ -21,6 +25,7 @@
     initSidebarControls();
     initNavigationHistory();
     initArtifactsControls();
+    initRepoExplorerControls();
     initChatControls();
     applyThemeCustomizations();
     loadSessions();
@@ -1047,13 +1052,25 @@
     empty.classList.add("hidden");
     body.classList.remove("hidden");
 
-    tabs.forEach(t => t.classList.remove("active"));
-    document.querySelector('.art-tab[data-tab="doc"]')?.classList.add("active");
-    document.querySelectorAll(".art-panel").forEach(p => p.classList.remove("active"));
-    document.getElementById("tabDoc")?.classList.add("active");
+    const name = typeof artifact === "object" ? (artifact.name || "artifact.md") : "artifact.md";
+    const content = typeof artifact === "object" ? (artifact.content || "") : String(artifact || "");
+    const isHtml = /\.html?$/i.test(name);
 
-    const content = artifact.content || artifact;
-    body.innerHTML = Render.renderMarkdown(content);
+    const previewFrame = document.getElementById("previewFrame");
+    if (previewFrame && isHtml) {
+      previewFrame.setAttribute("sandbox", "allow-scripts allow-forms");
+      previewFrame.removeAttribute("src");
+      previewFrame.srcdoc = content;
+    }
+
+    tabs.forEach(t => t.classList.remove("active"));
+    const targetTab = isHtml ? "preview" : "doc";
+    document.querySelector(`.art-tab[data-tab="${targetTab}"]`)?.classList.add("active");
+    document.querySelectorAll(".art-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById(isHtml ? "tabPreview" : "tabDoc")?.classList.add("active");
+
+    const mdContent = isHtml ? "```html\n" + content + "\n```" : content;
+    body.innerHTML = Render.renderMarkdown(mdContent);
     Render.renderMath(body);
   };
 
@@ -1110,6 +1127,9 @@
       });
     });
 
+    webSearchBtn?.classList.toggle("active", Store.isWebSearchEnabled());
+    cotBtn?.classList.toggle("active", Store.isCotEnabled());
+
     webSearchBtn?.addEventListener("click", () => {
       webSearchBtn.classList.toggle("active");
       Store.setWebSearchEnabled(webSearchBtn.classList.contains("active"));
@@ -1118,6 +1138,33 @@
     cotBtn?.addEventListener("click", () => {
       cotBtn.classList.toggle("active");
       Store.setCotEnabled(cotBtn.classList.contains("active"));
+    });
+
+    // Multimodal / Code File Attachments
+    const attachBtn = document.getElementById("attachFileBtn");
+    const attachInput = document.getElementById("chatAttachInput");
+
+    attachBtn?.addEventListener("click", () => attachInput?.click());
+    attachInput?.addEventListener("change", async (e) => {
+      if (e.target.files?.length) {
+        await processAttachmentFiles(e.target.files);
+        e.target.value = "";
+      }
+    });
+
+    promptInput.addEventListener("paste", async (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles = [];
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const f = item.getAsFile();
+          if (f) imageFiles.push(f);
+        }
+      }
+      if (imageFiles.length > 0) {
+        await processAttachmentFiles(imageFiles);
+      }
     });
 
     promptInput.addEventListener("keydown", (e) => {
@@ -1174,30 +1221,148 @@
     root.launchInteractiveDemo = launchInteractiveDemo;
   }
 
+  function renderAttachmentStrip() {
+    const strip = document.getElementById("attachmentStrip");
+    if (!strip) return;
+    if (pendingAttachments.length === 0) {
+      strip.innerHTML = "";
+      strip.classList.add("hidden");
+      return;
+    }
+    strip.classList.remove("hidden");
+    strip.innerHTML = "";
+    pendingAttachments.forEach((att, idx) => {
+      const chip = document.createElement("div");
+      chip.className = "attachment-chip";
+      if (att.data && att.mimeType?.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.className = "attachment-thumb";
+        img.src = `data:${att.mimeType};base64,${att.data}`;
+        img.alt = att.name;
+        chip.appendChild(img);
+      }
+      const label = document.createElement("span");
+      label.textContent = att.name;
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "attachment-remove-btn";
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", () => {
+        pendingAttachments.splice(idx, 1);
+        renderAttachmentStrip();
+      });
+      chip.appendChild(label);
+      chip.appendChild(removeBtn);
+      strip.appendChild(chip);
+    });
+  }
+
+  async function processAttachmentFiles(fileList) {
+    const files = Array.from(fileList || []).slice(0, 5 - pendingAttachments.length);
+    for (const file of files) {
+      if (file.type && file.type.startsWith("image/")) {
+        if (file.size > 3_500_000) {
+          showToast(`Image "${file.name}" exceeds 3.5MB limit.`);
+          continue;
+        }
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Read failed"));
+          reader.readAsDataURL(file);
+        });
+        const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+        pendingAttachments.push({
+          name: file.name || "pasted-image.png",
+          mimeType: file.type || "image/png",
+          data: base64,
+        });
+      } else {
+        if (file.size > 512_000) {
+          showToast(`File "${file.name}" is too large (max 500KB text).`);
+          continue;
+        }
+        const text = await file.text();
+        pendingAttachments.push({
+          name: file.name,
+          mimeType: file.type || "text/plain",
+          text: text.slice(0, 24000),
+        });
+      }
+    }
+    renderAttachmentStrip();
+  }
+
+  function buildUserMessageElement(text, attachmentsMeta = []) {
+    const userMsg = document.createElement("div");
+    userMsg.className = "chat-msg user";
+    if (Array.isArray(attachmentsMeta) && attachmentsMeta.length > 0) {
+      const attWrap = document.createElement("div");
+      attWrap.className = "chat-msg-attachments";
+      attachmentsMeta.forEach((att) => {
+        if (att.previewDataUrl) {
+          const img = document.createElement("img");
+          img.className = "chat-msg-att-img";
+          img.src = att.previewDataUrl;
+          img.alt = att.name || "image";
+          attWrap.appendChild(img);
+        } else {
+          const tag = document.createElement("span");
+          tag.className = "chat-msg-att-file";
+          tag.textContent = `📎 ${att.name || "file"}`;
+          attWrap.appendChild(tag);
+        }
+      });
+      userMsg.appendChild(attWrap);
+    }
+    if (text) {
+      const txtDiv = document.createElement("div");
+      txtDiv.textContent = text;
+      userMsg.appendChild(txtDiv);
+    }
+    return userMsg;
+  }
+
   function sendMessage() {
     const input = document.getElementById("promptInput");
-    const text = input.value.trim();
-    if (!text) return;
+    const rawText = input.value.trim();
+    if (!rawText && pendingAttachments.length === 0) return;
+
+    const sentAttachments = [...pendingAttachments];
+    pendingAttachments = [];
+    renderAttachmentStrip();
 
     input.value = "";
     input.style.height = "auto";
     document.getElementById("slashPopover")?.classList.add("hidden");
 
+    const displayPrompt = rawText || `Analyze attached file${sentAttachments.length > 1 ? "s" : ""}: ${sentAttachments.map(a => a.name).join(", ")}`;
+
     if (!activeSession) {
-      createNewSession(text.slice(0, 32));
+      createNewSession(displayPrompt.slice(0, 32));
     }
 
+    const attachmentsMeta = sentAttachments.map(a => ({
+      name: a.name,
+      isImage: Boolean(a.data),
+      previewDataUrl: a.data && a.data.length < 180_000 ? `data:${a.mimeType};base64,${a.data}` : ""
+    }));
+
     const stream = document.getElementById("chatStream");
-    const userMsg = document.createElement("div");
-    userMsg.className = "chat-msg user";
-    userMsg.textContent = text;
+    stream.querySelector(".welcome-empty-card")?.remove();
+    const userMsg = buildUserMessageElement(displayPrompt, attachmentsMeta);
     stream.appendChild(userMsg);
     stream.scrollTop = stream.scrollHeight;
 
-    activeSession.messages.push({ role: "user", content: text, created_at: new Date().toISOString() });
+    activeSession.messages.push({
+      role: "user",
+      content: displayPrompt,
+      attachmentsMeta,
+      created_at: new Date().toISOString()
+    });
     saveActiveSession();
 
-    callAgentStream(text);
+    callAgentStream(displayPrompt, { rawPrompt: rawText, attachments: sentAttachments });
   }
 
   // 10. Real-Time Streaming & Local Agent Engine
@@ -1252,12 +1417,50 @@
     return false;
   }
 
-  async function callAgentStream(prompt) {
+  function prepareLivePrompt(prompt) {
+    const trimmed = String(prompt || "").trim();
+    const lower = trimmed.toLowerCase();
+    let effectivePrompt = trimmed;
+    let forceWebSearch = false;
+    let forceMode = null;
+
+    if (lower.startsWith("/learn ")) {
+      const rule = trimmed.slice(7).trim();
+      if (rule) {
+        Store.setRules(`${Store.getRules()}\n- [User Rule]: ${rule}`);
+        showToast("Rule persisted to AGENTS.md!");
+        effectivePrompt = `I just saved this rule to AGENTS.md: "${rule}". Confirm succinctly and keep following it.`;
+      }
+    } else if (lower.startsWith("/plan")) {
+      const topic = trimmed.replace(/^\/plan\s*/i, "").trim() || "Current architecture roadmap";
+      forceMode = "architect";
+      effectivePrompt = `Create a thorough implementation plan for: ${topic}. Inspect relevant Happ3ns GitHub repo files if helpful, and call the create_artifact tool with a clean Markdown (.md) plan so it opens in Studio.`;
+    } else if (lower.startsWith("/search")) {
+      const q = trimmed.replace(/^\/search\s*/i, "").trim() || "SMU SCIS admissions 2026";
+      forceWebSearch = true;
+      effectivePrompt = `Search the live web using web_search for "${q}", fetch key pages with fetch_webpage if needed, and summarize with direct source links.`;
+    } else if (lower.startsWith("/goal")) {
+      const g = trimmed.replace(/^\/goal\s*/i, "").trim() || "Audit portfolio projects";
+      forceMode = "agentic";
+      effectivePrompt = `Work step-by-step on this goal using real tools (github_*, web_search, run_javascript, create_artifact) until complete: ${g}`;
+    } else if (lower.startsWith("/quiz")) {
+      const topic = trimmed.replace(/^\/quiz\s*/i, "").trim() || "JEE Advanced Physics & Calculus";
+      effectivePrompt = `Create an original, high-yield practice problem on: ${topic}. Use KaTeX math notation ($$...$$) and verify numerical answers with run_javascript when helpful, followed by a complete solution.`;
+    }
+
+    return { effectivePrompt, forceWebSearch, forceMode };
+  }
+
+  async function callAgentStream(prompt, options = {}) {
     const stream = document.getElementById("chatStream");
     const apiKey = Store.getApiKey();
     const backendUrl = resolveBackendChatUrl();
     const model = Store.getModel();
-    const mode = Store.getMode();
+    const attachments = Array.isArray(options.attachments) ? options.attachments : [];
+    const { effectivePrompt, forceWebSearch, forceMode } = prepareLivePrompt(prompt);
+    const mode = forceMode || Store.getMode();
+    const webSearch = forceWebSearch || Store.isWebSearchEnabled();
+    const cotEnabled = Store.isCotEnabled();
 
     if (!apiKey && !backendUrl) {
       handleLocalAgentResponse(prompt);
@@ -1265,6 +1468,7 @@
     }
 
     const streamingEl = Render.createStreamingElement(model);
+    if (!cotEnabled) streamingEl.hideThinkingIfUnused();
     stream.appendChild(streamingEl.element);
     stream.scrollTop = stream.scrollHeight;
 
@@ -1275,22 +1479,36 @@
 
     const contents = buildSanitizedContents(activeSession.messages);
     if (contents.length === 0) {
-      contents.push({ role: "user", parts: [{ text: prompt }] });
+      contents.push({ role: "user", parts: [{ text: effectivePrompt }] });
+    } else if (effectivePrompt !== prompt) {
+      const last = contents[contents.length - 1];
+      if (last && last.role === "user") last.parts[0].text = effectivePrompt;
+    }
+
+    if (!useBackendProxy && attachments.length > 0) {
+      const lastUser = contents[contents.length - 1];
+      attachments.forEach(att => {
+        if (att.data && att.mimeType) {
+          lastUser.parts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+        } else if (att.text) {
+          lastUser.parts[0].text += `\n\n[Attached File: ${att.name}]\n\`\`\`\n${att.text}\n\`\`\``;
+        }
+      });
     }
 
     // Inject active user rules, skills, God Plugins & MCP servers into system prompt
     const userRules = Store.getRules();
     const activeSkills = Store.getSkills().filter(s => s.enabled).map(s => `• ${s.icon} ${s.name}: ${s.desc}`).join("\n");
-    const activePlugins = Store.getPlugins().filter(p => p.enabled).map(p => `• [God Plugin] ${p.name} (${p.category}): Tools=[${p.tools.join(", ")}]`).join("\n");
-    const customMcp = Store.getCustomMcpServers().map(s => `• [Custom MCP] ${s.name} (${s.transport}): ${s.endpoint}`).join("\n");
+    const activePlugins = Store.getPlugins().filter(p => p.enabled).map(p => `• [Workspace Plugin Config] ${p.name} (${p.category})`).join("\n");
+    const customMcp = Store.getCustomMcpServers().map(s => `• [Custom MCP Config] ${s.name} (${s.transport}): ${s.endpoint}`).join("\n");
 
     const systemInstruction = `You are Antigravity, Google DeepMind's Advanced Agentic Coding Assistant paired with Akshat (Happ3ns).
 Operating Mode: ${mode.toUpperCase()}.
 
-Enabled God Plugins:
+Workspace Config Plugins:
 ${activePlugins || "None"}
 
-Connected Custom MCP Servers:
+Custom MCP Config Entries:
 ${customMcp || "None"}
 
 Active Skills:
@@ -1300,16 +1518,27 @@ User Instructions & AGENTS.md Rules:
 ${userRules}
 
 Be direct, conversational, helpful, and crisp like an experienced pair programmer and tutor.
-Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $...$ inline), and code blocks with language tags.
-Wrap internal reasoning briefly in <thinking>...</thinking> tags before the final answer.`;
+Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $...$ inline), and code blocks with language tags.${cotEnabled ? "\nWrap brief internal reasoning inside <thinking>...</thinking> tags before the final answer." : "\nAnswer directly without <thinking> tags."}`;
 
     try {
+      const historyForProxy = (activeSession.messages || []).slice(-10).map((m, idx, arr) => {
+        if (idx === arr.length - 1 && m.role === "user" && effectivePrompt !== prompt) {
+          return { ...m, content: effectivePrompt };
+        }
+        return m;
+      });
+
       const requestPayload = useBackendProxy
         ? {
-            prompt,
+            prompt: effectivePrompt,
             model,
             apiKey: apiKey || undefined,
-            history: (activeSession.messages || []).slice(-10),
+            githubToken: Store.getGithubToken() || undefined,
+            mode,
+            webSearch,
+            cotEnabled,
+            attachments,
+            history: historyForProxy,
             systemInstruction,
             stream: true
           }
@@ -1342,6 +1571,97 @@ Wrap internal reasoning briefly in <thinking>...</thinking> tags before the fina
       let bodyBuffer = "";
       let thinkingFinalized = false;
       let buffer = "";
+      let usedModelLabel = response.headers.get("X-Antigravity-Model") || model;
+      if (usedModelLabel !== model) streamingEl.setModelLabel(usedModelLabel);
+
+      const toolCallsList = [];
+      const artifactsList = [];
+
+      const handleSseLine = (line) => {
+        if (!line.startsWith("data: ")) return;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr || jsonStr === "[DONE]") return;
+
+        let data;
+        try {
+          data = JSON.parse(jsonStr);
+        } catch (err) {
+          return;
+        }
+
+        if (data.ag_event) {
+          if (data.ag_event === "meta" && data.model) {
+            usedModelLabel = data.model;
+            streamingEl.setModelLabel(usedModelLabel);
+          } else if (data.ag_event === "tool_start" && data.tool) {
+            toolCallsList.push({ ...data.tool, status: "running" });
+            streamingEl.setTools(toolCallsList);
+          } else if (data.ag_event === "tool_done" && data.tool) {
+            let matchIdx = -1;
+            for (let i = toolCallsList.length - 1; i >= 0; i--) {
+              if (toolCallsList[i].name === data.tool.name && toolCallsList[i].status === "running") {
+                matchIdx = i;
+                break;
+              }
+            }
+            if (matchIdx >= 0) toolCallsList[matchIdx] = data.tool;
+            else toolCallsList.push(data.tool);
+            streamingEl.setTools(toolCallsList);
+          } else if (data.ag_event === "artifact" && data.artifact) {
+            artifactsList.push(data.artifact);
+            streamingEl.setArtifact(artifactsList);
+            if (!Array.isArray(activeSession.artifacts)) activeSession.artifacts = [];
+            activeSession.artifacts.unshift(data.artifact);
+            if (window.innerWidth >= 1200) root.showArtifact(data.artifact);
+          } else if (data.ag_event === "rule_saved" && data.rule) {
+            Store.setRules(`${Store.getRules()}\n- [Agent Rule]: ${data.rule}`);
+            showToast("Saved rule to AGENTS.md!");
+          } else if (data.ag_event === "error") {
+            throw new Error(data.error || "Agent stream error");
+          }
+          stream.scrollTop = stream.scrollHeight;
+          return;
+        }
+
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        for (const part of parts) {
+          if (!part.text) continue;
+
+          if (part.thought) {
+            thinkingBuffer += part.text;
+            streamingEl.updateThinking(thinkingBuffer);
+            continue;
+          }
+
+          fullText += part.text;
+
+          if (fullText.includes("<thinking>")) {
+            const splitOpen = fullText.split("<thinking>");
+            const afterOpen = splitOpen[1] || "";
+            if (afterOpen.includes("</thinking>")) {
+              const subParts = afterOpen.split("</thinking>");
+              thinkingBuffer = (splitOpen[0] ? "" : thinkingBuffer) || subParts[0].trim();
+              bodyBuffer = (splitOpen[0] || "") + subParts.slice(1).join("</thinking>");
+              streamingEl.updateThinking(thinkingBuffer);
+              if (!thinkingFinalized) {
+                streamingEl.finalizeThinking();
+                thinkingFinalized = true;
+              }
+              streamingEl.updateBody(bodyBuffer);
+            } else {
+              streamingEl.updateThinking(afterOpen);
+            }
+          } else {
+            bodyBuffer = fullText;
+            if (!thinkingFinalized) {
+              streamingEl.finalizeThinking();
+              thinkingFinalized = true;
+            }
+            streamingEl.updateBody(bodyBuffer);
+          }
+        }
+        stream.scrollTop = stream.scrollHeight;
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1352,52 +1672,11 @@ Wrap internal reasoning briefly in <thinking>...</thinking> tags before the fina
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr || jsonStr === "[DONE]") continue;
-
-          try {
-            const data = JSON.parse(jsonStr);
-            const parts = data.candidates?.[0]?.content?.parts || [];
-            for (const part of parts) {
-              if (!part.text) continue;
-
-              if (part.thought) {
-                thinkingBuffer += part.text;
-                streamingEl.updateThinking(thinkingBuffer);
-                continue;
-              }
-
-              fullText += part.text;
-
-              if (fullText.includes("<thinking>")) {
-                const splitOpen = fullText.split("<thinking>");
-                const afterOpen = splitOpen[1] || "";
-                if (afterOpen.includes("</thinking>")) {
-                  const subParts = afterOpen.split("</thinking>");
-                  thinkingBuffer = (splitOpen[0] ? "" : thinkingBuffer) || subParts[0].trim();
-                  bodyBuffer = (splitOpen[0] || "") + subParts.slice(1).join("</thinking>");
-                  streamingEl.updateThinking(thinkingBuffer);
-                  if (!thinkingFinalized) {
-                    streamingEl.finalizeThinking();
-                    thinkingFinalized = true;
-                  }
-                  streamingEl.updateBody(bodyBuffer);
-                } else {
-                  streamingEl.updateThinking(afterOpen);
-                }
-              } else {
-                bodyBuffer = fullText;
-                if (!thinkingFinalized) {
-                  streamingEl.finalizeThinking();
-                  thinkingFinalized = true;
-                }
-                streamingEl.updateBody(bodyBuffer);
-              }
-            }
-            stream.scrollTop = stream.scrollHeight;
-          } catch (err) {}
+          handleSseLine(line);
         }
+      }
+      if (buffer.trim()) {
+        for (const line of buffer.split("\n")) handleSseLine(line);
       }
 
       streamingEl.finish();
@@ -1406,6 +1685,9 @@ Wrap internal reasoning briefly in <thinking>...</thinking> tags before the fina
         role: "assistant",
         content: bodyBuffer || fullText,
         thinking: thinkingBuffer,
+        model: usedModelLabel,
+        tool_calls: toolCallsList,
+        artifacts: artifactsList,
         created_at: new Date().toISOString()
       });
       saveActiveSession();
@@ -1994,10 +2276,7 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
 
     activeSession.messages.forEach(msg => {
       if (msg.role === "user") {
-        const userEl = document.createElement("div");
-        userEl.className = "chat-msg user";
-        userEl.textContent = msg.content;
-        stream.appendChild(userEl);
+        stream.appendChild(buildUserMessageElement(msg.content, msg.attachmentsMeta || []));
       } else {
         const assistantEl = Render.buildAssistantMessageElement(msg, Store.getModel());
         stream.appendChild(assistantEl);
@@ -2057,41 +2336,118 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
   }
 
   // 14. GitHub Repository Tree Explorer
-  async function loadRepoFiles() {
+  function initRepoExplorerControls() {
+    const selector = document.getElementById("repoSelector");
+    const askBtn = document.getElementById("askAboutFileBtn");
+
+    selector?.addEventListener("change", () => {
+      currentRepoName = selector.value || "Happ3ns/antigravity-hub";
+      selectedRepoState = { repo: currentRepoName, path: "", content: "" };
+      loadRepoFiles(currentRepoName);
+    });
+
+    askBtn?.addEventListener("click", () => {
+      const targetRepo = selector?.value || currentRepoName || "Happ3ns/antigravity-hub";
+      const filePath = selectedRepoState.path;
+      const input = document.getElementById("promptInput");
+      if (!input) return;
+      input.value = filePath
+        ? `Review and explain \`${filePath}\` in \`${targetRepo}\` using github_read_file.`
+        : `Inspect the architecture of \`${targetRepo}\` using github_read_tree.`;
+      input.focus();
+      showToast("Prompt ready — press Send or edit first!");
+    });
+  }
+
+  async function populateReposSelector() {
+    if (reposCatalogLoaded) return;
+    const selector = document.getElementById("repoSelector");
+    if (!selector) return;
+    reposCatalogLoaded = true;
+    try {
+      const ghToken = Store.getGithubToken();
+      const res = await fetch("https://api.github.com/users/Happ3ns/repos?sort=updated&per_page=15", {
+        headers: ghToken ? { Authorization: `Bearer ${ghToken}` } : {}
+      });
+      if (!res.ok) return;
+      const repos = await res.json();
+      if (!Array.isArray(repos) || repos.length === 0) return;
+      const prevVal = selector.value;
+      selector.innerHTML = "";
+      repos.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r.full_name;
+        opt.textContent = r.full_name;
+        selector.appendChild(opt);
+      });
+      if (Array.from(selector.options).some(o => o.value === prevVal)) {
+        selector.value = prevVal;
+      }
+      currentRepoName = selector.value || currentRepoName;
+    } catch (e) {}
+  }
+
+  async function loadRepoFiles(repoOverride) {
+    const selector = document.getElementById("repoSelector");
+    const targetRepo = repoOverride || selector?.value || currentRepoName || "Happ3ns/antigravity-hub";
+    currentRepoName = targetRepo;
+    populateReposSelector();
+
     const treeEl = document.getElementById("repoTree");
     treeEl.innerHTML = `<div style="padding:12px; color:var(--ink-secondary);">Fetching repo files...</div>`;
 
+    const ghToken = Store.getGithubToken();
+    const headers = ghToken ? { Authorization: `Bearer ${ghToken}` } : {};
+
     try {
-      const res = await fetch("https://api.github.com/repos/Happ3ns/JEE-Quiz-Generator/git/trees/main?recursive=1");
-      if (!res.ok) throw new Error("Could not load repo tree");
-      const data = await res.json();
-      
+      let data = null;
+      let activeBranch = "main";
+      for (const br of ["main", "master"]) {
+        const res = await fetch(`https://api.github.com/repos/${targetRepo}/git/trees/${br}?recursive=1`, { headers });
+        if (res.ok) {
+          data = await res.json();
+          activeBranch = br;
+          break;
+        }
+      }
+      if (!data) throw new Error("Could not load repo tree");
+
       treeEl.innerHTML = "";
-      (data.tree || []).slice(0, 45).forEach(node => {
+      (data.tree || []).slice(0, 80).forEach(node => {
         const item = document.createElement("div");
         item.className = "tree-node";
         const icon = node.type === "tree" ? "📁" : "📄";
-        item.innerHTML = `<span class="tree-icon">${icon}</span><span>${node.path}</span>`;
+        item.innerHTML = `<span class="tree-icon">${icon}</span><span>${Render.escapeHtml(node.path)}</span>`;
         item.addEventListener("click", () => {
           document.querySelectorAll(".tree-node").forEach(n => n.classList.remove("active"));
           item.classList.add("active");
           if (node.type === "blob") {
-            loadFileContent(node.path);
+            loadFileContent(node.path, targetRepo, activeBranch);
           }
         });
         treeEl.appendChild(item);
       });
     } catch (err) {
-      treeEl.innerHTML = `<div style="padding:12px; color:var(--accent-coral);">Failed to fetch files: ${err.message}</div>`;
+      treeEl.innerHTML = `<div style="padding:12px; color:var(--accent-coral);">Failed to fetch files: ${Render.escapeHtml(err.message)}</div>`;
     }
   }
 
-  async function loadFileContent(filePath) {
+  async function loadFileContent(filePath, targetRepo = currentRepoName, branch = "main") {
     const codeView = document.getElementById("repoCodeView");
     codeView.textContent = `Loading ${filePath}...`;
+    selectedRepoState = { repo: targetRepo, path: filePath, content: "" };
     try {
-      const res = await fetch(`https://raw.githubusercontent.com/Happ3ns/JEE-Quiz-Generator/main/${filePath}`);
+      const ghToken = Store.getGithubToken();
+      const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+      const res = await fetch(`https://api.github.com/repos/${targetRepo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`, {
+        headers: {
+          Accept: "application/vnd.github.raw+json",
+          ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {})
+        }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
+      selectedRepoState.content = text;
       codeView.textContent = text;
     } catch (e) {
       codeView.textContent = `Error loading file: ${e.message}`;

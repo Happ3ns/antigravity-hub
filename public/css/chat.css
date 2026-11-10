@@ -548,3 +548,88 @@
   cursor: not-allowed;
   transform: none;
 }
+
+/* ── Tool Execution Preview & Error States ── */
+.tool-status-pill.error {
+  color: var(--accent-coral);
+}
+
+.tool-result-preview {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-hairline);
+  color: #a5b4fc;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* ── Composer Multimodal Attachment Strip ── */
+.attachment-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.attachment-strip.hidden {
+  display: none;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #e2e8f0;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+}
+
+.attachment-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.attachment-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.attachment-remove-btn:hover {
+  color: #fff;
+}
+
+.chat-msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chat-msg-att-img {
+  max-width: 220px;
+  max-height: 160px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-subtle);
+  object-fit: cover;
+}
+
+.chat-msg-att-file {
+  padding: 3px 8px;
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #c7d2fe;
+}

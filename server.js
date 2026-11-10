@@ -36,9 +36,23 @@ const server = http.createServer((req, res) => {
       chatHandler(req, res);
       return;
     }
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
+    let size = 0;
+    const chunks = [];
+    let aborted = false;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > 8 * 1024 * 1024) {
+        aborted = true;
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Request payload too large (max 8MB).' }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => {
+      if (aborted) return;
+      const body = Buffer.concat(chunks).toString('utf8');
       try { req.body = body ? JSON.parse(body) : {}; } catch (e) { req.body = {}; }
       chatHandler(req, res);
     });

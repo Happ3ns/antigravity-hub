@@ -57,20 +57,31 @@
     toolCard.className = "tool-call-card";
     const toolName = tc.name || tc.function?.name || "tool";
     const toolArgs = tc.args || tc.function?.arguments || "{}";
+    const status = tc.status || "done";
 
     let toolIcon = icons.get("terminal");
-    if (toolName.includes("search")) toolIcon = icons.get("search");
-    else if (toolName.includes("file") || toolName.includes("write") || toolName.includes("edit")) toolIcon = icons.get("file");
+    if (toolName.includes("search") || toolName.includes("fetch") || toolName.includes("arxiv") || toolName.includes("pubchem")) toolIcon = icons.get("search");
+    else if (toolName.includes("file") || toolName.includes("write") || toolName.includes("edit") || toolName.includes("artifact") || toolName.includes("tree")) toolIcon = icons.get("file");
     else if (toolName.includes("github")) toolIcon = icons.get("github");
+
+    let statusHtml = `<span class="tool-status-pill">${icons.get("check")} Executed</span>`;
+    if (status === "running") {
+      statusHtml = `<span class="tool-status-pill running">⏳ Running...</span>`;
+    } else if (status === "error") {
+      statusHtml = `<span class="tool-status-pill error">⚠ Error</span>`;
+    }
+
+    const argsText = typeof toolArgs === "string" ? toolArgs : JSON.stringify(toolArgs, null, 2);
+    const resultBlock = tc.resultPreview
+      ? `<div class="tool-result-preview">${escapeHtml(tc.resultPreview)}</div>`
+      : "";
 
     toolCard.innerHTML = `
       <div class="tool-call-header">
         <span class="tool-badge-pill">${toolIcon} ${escapeHtml(toolName)}</span>
-        <span class="tool-status-pill">
-          ${icons.get("check")} Executed
-        </span>
+        ${statusHtml}
       </div>
-      <div class="tool-call-body">${escapeHtml(typeof toolArgs === "string" ? toolArgs : JSON.stringify(toolArgs, null, 2))}</div>
+      <div class="tool-call-body">${escapeHtml(argsText)}${resultBlock}</div>
     `;
     return toolCard;
   }
@@ -163,9 +174,16 @@
     }
 
     // 4. Artifact Reference Card (if artifact is detected)
-    if (msgData.artifact || (body && body.includes("jee-analysis.md"))) {
-      el.appendChild(createArtifactCard(msgData.artifact, icons));
-    }
+    const artifactsList = Array.isArray(msgData.artifacts)
+      ? msgData.artifacts
+      : msgData.artifact
+        ? [msgData.artifact]
+        : body && body.includes("jee-analysis.md")
+          ? [{ name: "jee-analysis.md" }]
+          : [];
+    artifactsList.forEach(art => {
+      el.appendChild(createArtifactCard(art, icons));
+    });
 
     // 5. Main Markdown Response Body
     if (body) {
@@ -239,6 +257,17 @@
 
     return {
       element: el,
+      setModelLabel: function (newName) {
+        const tag = header.querySelector(".assistant-model-tag");
+        if (tag && newName) tag.textContent = newName;
+      },
+      hideThinkingIfUnused: function () {
+        const contentEl = thinkingBlock.querySelector(".thinking-content");
+        if (contentEl && contentEl.textContent === "Initializing thought process...") {
+          clearInterval(timerInterval);
+          thinkingBlock.style.display = "none";
+        }
+      },
       updateThinking: function (text) {
         thinkingBlock.style.display = "block";
         const contentEl = thinkingBlock.querySelector(".thinking-content");
@@ -252,7 +281,11 @@
       },
       setArtifact: function (artifact) {
         artifactSlot.innerHTML = "";
-        if (artifact) artifactSlot.appendChild(createArtifactCard(artifact, icons));
+        if (Array.isArray(artifact)) {
+          artifact.forEach(a => artifactSlot.appendChild(createArtifactCard(a, icons)));
+        } else if (artifact) {
+          artifactSlot.appendChild(createArtifactCard(artifact, icons));
+        }
       },
       finalizeThinking: function () {
         clearInterval(timerInterval);
@@ -272,6 +305,7 @@
         clearInterval(timerInterval);
         el.classList.remove("streaming");
         thinkingBlock.open = false;
+        this.hideThinkingIfUnused();
         attachCopyButtons(bodyDiv, icons);
         renderMath(bodyDiv);
       }

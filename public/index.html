@@ -27,10 +27,10 @@
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 
   <!-- Modern 2026 Stylesheets -->
-  <link rel="stylesheet" href="css/theme.css?v=2026.8">
-  <link rel="stylesheet" href="css/layout.css?v=2026.8">
-  <link rel="stylesheet" href="css/chat.css?v=2026.8">
-  <link rel="stylesheet" href="css/artifacts.css?v=2026.8">
+  <link rel="stylesheet" href="css/theme.css?v=2026.9">
+  <link rel="stylesheet" href="css/layout.css?v=2026.9">
+  <link rel="stylesheet" href="css/chat.css?v=2026.9">
+  <link rel="stylesheet" href="css/artifacts.css?v=2026.9">
 </head>
 <body>
 
@@ -287,9 +287,15 @@
 
         <!-- Floating Composer Input Card -->
         <div class="input-card">
+          <div class="attachment-strip hidden" id="attachmentStrip"></div>
+          <input type="file" id="chatAttachInput" accept="image/*,.txt,.md,.js,.ts,.jsx,.tsx,.py,.json,.html,.css,.csv,.java,.cpp,.c,.yml,.yaml" multiple hidden>
           <textarea id="promptInput" rows="1" placeholder="Message Antigravity or type / for commands..." autofocus></textarea>
           <div class="input-actions">
             <div class="input-tools">
+              <button class="composer-tool-btn" id="attachFileBtn" type="button" title="Attach image or code file">
+                <span>📎</span>
+                <span>Attach</span>
+              </button>
               <button class="composer-tool-btn active" id="webSearchToggleBtn">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 <span>Web Search</span>
@@ -346,6 +352,13 @@
 
         <!-- Tab 3: GitHub Repo Files Explorer & Code Inspector -->
         <div class="art-panel" id="tabFiles">
+          <div class="repo-toolbar">
+            <select id="repoSelector" class="repo-select" aria-label="Select GitHub Repository">
+              <option value="Happ3ns/antigravity-hub">Happ3ns/antigravity-hub</option>
+              <option value="Happ3ns/JEE-Quiz-Generator">Happ3ns/JEE-Quiz-Generator</option>
+            </select>
+            <button class="repo-ask-btn" id="askAboutFileBtn" type="button" title="Send selected file into chat">Ask Agent</button>
+          </div>
           <div class="repo-browser-split">
             <div class="repo-tree-col" id="repoTree">
               <div style="padding: 12px; color: var(--ink-secondary); font-size: 12px;">Loading repository files...</div>
@@ -680,10 +693,10 @@
   </dialog>
 
   <!-- Application Scripts -->
-  <script src="js/config.js?v=2026.8"></script>
-  <script src="js/icons.js?v=2026.8"></script>
-  <script src="js/store.js?v=2026.8"></script>
-  <script src="js/render.js?v=2026.8"></script>
-  <script src="js/app.js?v=2026.8"></script>
+  <script src="js/config.js?v=2026.9"></script>
+  <script src="js/icons.js?v=2026.9"></script>
+  <script src="js/store.js?v=2026.9"></script>
+  <script src="js/render.js?v=2026.9"></script>
+  <script src="js/app.js?v=2026.9"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
-// ── Vercel Serverless Function & Local Node Proxy: Pre-installed Gemini Streaming Agent ──
+// ── Vercel Serverless Function & Local Node Proxy: Multi-Turn Streaming Antigravity Agent ──
+const { getToolDeclarations, executeToolCall } = require("./_tools.js");
 
 const MODEL_MIGRATION_MAP = {
   "gemini-2.5-flash": "gemini-3.8-flash",
@@ -9,6 +10,11 @@ const MODEL_MIGRATION_MAP = {
   "gemini-2.5-pro": "gemini-4-argon",
 };
 
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
+const RETRY_STATUSES = new Set([404, 429, 503]);
+const ALLOWED_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const overloadedModelUntil = new Map();
+
 function resolveActiveModel(requested) {
   const m = (requested || "gemini-3.8-flash").trim();
   if (MODEL_MIGRATION_MAP[m]) return MODEL_MIGRATION_MAP[m];
@@ -16,7 +22,7 @@ function resolveActiveModel(requested) {
   return m;
 }
 
-function buildSanitizedContents(history, prompt) {
+function buildSanitizedContents(history, prompt, attachments = []) {
   const contents = [];
   for (const msg of history || []) {
     if (!msg || typeof msg.content !== "string" || !msg.content.trim()) continue;
@@ -32,23 +38,203 @@ function buildSanitizedContents(history, prompt) {
     contents.shift();
   }
 
-  if (typeof prompt === "string" && prompt.trim()) {
+  const promptText = typeof prompt === "string" ? prompt.trim() : "";
+  const extraParts = [];
+  let textFileBundle = "";
+
+  if (Array.isArray(attachments)) {
+    for (const att of attachments.slice(0, 5)) {
+      if (!att) continue;
+      if (
+        typeof att.data === "string" &&
+        ALLOWED_IMAGE_MIMES.has(att.mimeType) &&
+        att.data.length <= 4_500_000
+      ) {
+        extraParts.push({
+          inlineData: { mimeType: att.mimeType, data: att.data },
+        });
+      } else if (typeof att.text === "string" && att.text.trim()) {
+        const safeName = String(att.name || "attachment.txt").slice(0, 120);
+        textFileBundle += `\n\n[Attached File: ${safeName}]\n\`\`\`\n${att.text.slice(0, 24000)}\n\`\`\``;
+      }
+    }
+  }
+
+  const combinedUserText = [promptText, textFileBundle.trim()].filter(Boolean).join("\n\n");
+  if (combinedUserText || extraParts.length > 0) {
     const last = contents[contents.length - 1];
-    if (!last || last.role !== "user" || last.parts[0].text !== prompt.trim()) {
+    const isDuplicateLastText =
+      last && last.role === "user" && promptText && last.parts[0]?.text === promptText && extraParts.length === 0 && !textFileBundle;
+
+    if (!isDuplicateLastText) {
       if (last && last.role === "user") {
-        last.parts[0].text += "\n\n" + prompt.trim();
+        if (combinedUserText && last.parts[0]?.text !== promptText) {
+          last.parts[0].text += "\n\n" + combinedUserText;
+        } else if (textFileBundle) {
+          last.parts[0].text += textFileBundle;
+        }
+        last.parts.push(...extraParts);
       } else {
-        contents.push({ role: "user", parts: [{ text: prompt.trim() }] });
+        const parts = [];
+        if (combinedUserText) parts.push({ text: combinedUserText });
+        parts.push(...extraParts);
+        contents.push({ role: "user", parts });
       }
     }
   }
   return contents;
 }
 
+function buildAgentSystemPrompt(customInstruction, { mode, webSearchEnabled, cotEnabled }) {
+  const base =
+    customInstruction ||
+    `You are Antigravity, Google DeepMind's Advanced Agentic Coding Assistant running in the cloud for Akshat.
+Be direct, conversational, helpful, and crisp. Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $...$ inline), and fenced code blocks.`;
+
+  const capabilityNotes = [
+    "",
+    "=== LIVE RUNTIME TOOLS & GROUNDING RULES ===",
+    `Web Search Toggle: ${webSearchEnabled ? "ENABLED (web_search & fetch_webpage available)" : "DISABLED by user"}`,
+    `Chain-of-Thought Toggle: ${cotEnabled ? "ENABLED — wrap brief reasoning inside <thinking>...</thinking> before your final answer." : "DISABLED — omit <thinking> tags and answer directly."}`,
+    `Mode: ${String(mode || "agentic").toUpperCase()}`,
+    "Available server tools you can actually invoke:",
+    "- github_list_repos, github_read_tree, github_read_file, github_search_code, github_commit_file (writes require user's GitHub PAT in Settings)",
+    "- run_javascript (isolated JS sandbox for algorithms, math checks, and data transforms)",
+    "- arxiv_search, pubchem_lookup (live scientific papers and chemical lookups)",
+    "- create_artifact (opens interactive Markdown plans, reports, or standalone HTML widgets in the Studio pane)",
+    "- save_memory_rule (saves permanent user preferences to AGENTS.md browser vault)",
+    webSearchEnabled ? "- web_search, fetch_webpage (live internet search and webpage reading)" : "",
+    "",
+    "Strict Honesty Constraints:",
+    "1. NEVER claim you ran a tool, searched the web, read a file, or edited a repo unless you actually called the tool in this turn and saw its result.",
+    "2. If a task requires local PC terminal execution, local filesystem writes, or authenticated external SaaS MCPs (Figma, Notion, Supabase, Vercel deploy), tell the user honestly what this web runtime cannot execute directly and use GitHub/Artifact/JS tools where applicable.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return base + "\n" + capabilityNotes;
+}
+
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+function sendSse(res, obj) {
+  res.write(`data: ${JSON.stringify(obj)}\n\n`);
+}
+
+function extractCompactPreview(output) {
+  try {
+    const raw = JSON.stringify(output);
+    return raw.length > 550 ? raw.slice(0, 550) + "…" : raw;
+  } catch (e) {
+    return String(output).slice(0, 550);
+  }
+}
+
+async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, shouldStream }) {
+  const payload = JSON.stringify(bodyObj);
+  const now = Date.now();
+  const readyModels = candidateModels.filter((m) => (overloadedModelUntil.get(m) || 0) <= now);
+  const orderedModels = readyModels.length > 0 ? readyModels : candidateModels;
+
+  let lastRes = null;
+  let usedModel = orderedModels[0];
+
+  for (let i = 0; i < orderedModels.length; i++) {
+    usedModel = orderedModels[i];
+    const hasMore = i < orderedModels.length - 1;
+    const action = shouldStream ? "streamGenerateContent?alt=sse&" : "generateContent?";
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(usedModel)}:${action}key=${encodeURIComponent(activeKey)}`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), hasMore ? 6500 : 24000);
+    try {
+      lastRes = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      overloadedModelUntil.set(usedModel, Date.now() + 90_000);
+      if (!hasMore) throw err;
+      continue;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (lastRes.ok) {
+      overloadedModelUntil.delete(usedModel);
+      return { apiRes: lastRes, activeModel: usedModel };
+    }
+
+    if (RETRY_STATUSES.has(lastRes.status)) {
+      overloadedModelUntil.set(usedModel, Date.now() + (lastRes.status === 404 ? 600_000 : 90_000));
+    }
+
+    if (!RETRY_STATUSES.has(lastRes.status) || !hasMore) {
+      return { apiRes: lastRes, activeModel: usedModel };
+    }
+    await lastRes.body?.cancel?.().catch(() => {});
+  }
+  return { apiRes: lastRes, activeModel: usedModel };
+}
+
+async function parseStepStream(apiRes, onTextChunk) {
+  const reader = apiRes.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let sseBuffer = "";
+  const capturedParts = [];
+
+  function processEventLine(line) {
+    if (!line.startsWith("data: ")) return;
+    const jsonStr = line.slice(6).trim();
+    if (!jsonStr || jsonStr === "[DONE]") return;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (e) {
+      return;
+    }
+
+    const parts = parsed?.candidates?.[0]?.content?.parts || [];
+    const textForwardParts = [];
+    for (const part of parts) {
+      if (part.functionCall || part.thoughtSignature || part.thought || (part.text && part.text.length > 0)) {
+        capturedParts.push(part);
+      }
+      if (part.text || part.thought) {
+        textForwardParts.push({
+          ...(part.text !== undefined ? { text: part.text } : {}),
+          ...(part.thought !== undefined ? { thought: part.thought } : {}),
+        });
+      }
+    }
+
+    if (textForwardParts.length > 0 && typeof onTextChunk === "function") {
+      onTextChunk({
+        candidates: [{ content: { parts: textForwardParts, role: "model" }, index: 0 }],
+      });
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    sseBuffer += decoder.decode(value, { stream: true });
+    const lines = sseBuffer.split("\n");
+    sseBuffer = lines.pop() || "";
+    for (const line of lines) processEventLine(line);
+  }
+  if (sseBuffer.trim()) {
+    for (const line of sseBuffer.split("\n")) processEventLine(line);
+  }
+
+  return capturedParts;
 }
 
 module.exports = async function handler(req, res) {
@@ -67,6 +253,7 @@ module.exports = async function handler(req, res) {
         ok: true,
         preinstalledKey: Boolean(process.env.GEMINI_API_KEY),
         defaultModel: "gemini-3.8-flash",
+        agenticTools: true,
       })
     );
   }
@@ -77,9 +264,21 @@ module.exports = async function handler(req, res) {
     return res.end(JSON.stringify({ error: "Method Not Allowed" }));
   }
 
-  const { prompt, model, apiKey, history, systemInstruction, stream } = req.body || {};
-  const activeKey = (apiKey || process.env.GEMINI_API_KEY || "").trim();
+  const {
+    prompt,
+    model,
+    apiKey,
+    history,
+    systemInstruction,
+    stream,
+    mode = "agentic",
+    webSearch = true,
+    cotEnabled = true,
+    githubToken,
+    attachments,
+  } = req.body || {};
 
+  const activeKey = (apiKey || process.env.GEMINI_API_KEY || "").trim();
   if (!activeKey) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
@@ -91,96 +290,167 @@ module.exports = async function handler(req, res) {
     );
   }
 
-  const targetModel = resolveActiveModel(model);
-  const sysText =
-    systemInstruction ||
-    `You are Antigravity, Google DeepMind's Advanced Agentic Coding Assistant running in the cloud for Akshat.
-Be direct, conversational, helpful, and crisp. Format responses with GitHub markdown, KaTeX math notation ($$...$$ or $...$), and code blocks.
-Wrap brief internal reasoning in <thinking>...</thinking> tags before the final answer.`;
-
-  const contents = buildSanitizedContents(history, prompt);
-  if (contents.length === 0) {
+  const workingContents = buildSanitizedContents(history, prompt, attachments);
+  if (workingContents.length === 0) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
     return res.end(JSON.stringify({ error: "Prompt cannot be empty." }));
   }
 
-  const payload = JSON.stringify({
-    contents,
-    systemInstruction: { parts: [{ text: sysText }] },
+  const targetModel = resolveActiveModel(model);
+  const candidateModels = [...new Set([targetModel, ...FALLBACK_MODELS])];
+  const finalSysText = buildAgentSystemPrompt(systemInstruction, {
+    mode,
+    webSearchEnabled: webSearch !== false,
+    cotEnabled: cotEnabled !== false,
+  });
+
+  const allowMutations = String(mode).toLowerCase() !== "ask";
+  const toolDeclarations = getToolDeclarations({
+    webSearchEnabled: webSearch !== false,
+    allowMutations,
   });
 
   const shouldStream = stream !== false;
-  const candidateModels = [
-    ...new Set([targetModel, "gemini-3.5-flash-lite", "gemini-2.5-flash"]),
-  ];
-  const retryStatuses = new Set([404, 429, 503]);
+  const maxSteps = String(mode).toLowerCase() === "ask" ? 3 : 6;
+  const effectiveGithubToken = (githubToken || process.env.GITHUB_TOKEN || "").trim();
 
-  try {
-    let apiRes = null;
-    let activeModel = targetModel;
+  const executedTools = [];
+  const createdArtifacts = [];
+  const savedRules = [];
+  let stickyModel = null;
+  let sseHeadersSent = false;
 
-    for (let i = 0; i < candidateModels.length; i++) {
-      activeModel = candidateModels[i];
-      const endpoint = shouldStream
-        ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(activeModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(activeKey)}`
-        : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(activeModel)}:generateContent?key=${encodeURIComponent(activeKey)}`;
-
-      apiRes = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-
-      if (
-        apiRes.ok ||
-        !retryStatuses.has(apiRes.status) ||
-        i === candidateModels.length - 1
-      ) {
-        break;
-      }
-      await apiRes.body?.cancel?.().catch(() => {});
-    }
-
-    if (!apiRes.ok) {
-      let errMessage = `Gemini API HTTP ${apiRes.status}`;
-      try {
-        const errJson = await apiRes.json();
-        errMessage = errJson?.error?.message || errMessage;
-      } catch (e) {
-        errMessage = await apiRes.text().catch(() => errMessage);
-      }
-      res.statusCode = apiRes.status;
-      res.setHeader("Content-Type", "application/json");
-      return res.end(JSON.stringify({ error: errMessage }));
-    }
-
-    res.setHeader("X-Antigravity-Model", activeModel);
-
-    if (shouldStream && apiRes.body) {
+  const ensureSseHeaders = (activeModel) => {
+    if (!sseHeadersSent) {
       res.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Antigravity-Model": activeModel,
       });
+      sseHeadersSent = true;
+      sendSse(res, { ag_event: "meta", model: activeModel });
+    }
+  };
 
-      const reader = apiRes.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          res.write(decoder.decode(value, { stream: true }));
+  try {
+    let finalNonStreamParts = [];
+    let finalModelUsed = targetModel;
+
+    for (let step = 0; step < maxSteps; step++) {
+      const stepModels = stickyModel
+        ? [...new Set([stickyModel, ...candidateModels])]
+        : candidateModels;
+      const isFinalWrapStep = step === maxSteps - 1;
+
+      const bodyObj = {
+        contents: workingContents,
+        systemInstruction: { parts: [{ text: finalSysText }] },
+        ...(isFinalWrapStep ? {} : { tools: toolDeclarations }),
+      };
+
+      const { apiRes, activeModel } = await fetchGeminiWithFallback({
+        candidateModels: stepModels,
+        bodyObj,
+        activeKey,
+        shouldStream,
+      });
+      finalModelUsed = activeModel;
+
+      if (!apiRes || !apiRes.ok) {
+        let errMessage = `Gemini API HTTP ${apiRes?.status || 500}`;
+        try {
+          const errJson = await apiRes.json();
+          errMessage = errJson?.error?.message || errMessage;
+        } catch (e) {
+          errMessage = (await apiRes?.text?.().catch(() => errMessage)) || errMessage;
         }
+
+        if (!sseHeadersSent) {
+          res.statusCode = apiRes?.status || 502;
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify({ error: errMessage }));
+        }
+        sendSse(res, { ag_event: "error", error: errMessage });
+        return res.end();
       }
+
+      stickyModel = activeModel;
+      let stepParts = [];
+
+      if (shouldStream && apiRes.body) {
+        ensureSseHeaders(activeModel);
+        stepParts = await parseStepStream(apiRes, (chunk) => sendSse(res, chunk));
+      } else {
+        const data = await apiRes.json();
+        stepParts = data?.candidates?.[0]?.content?.parts || [];
+        finalNonStreamParts = stepParts;
+      }
+
+      const functionCallParts = stepParts.filter((p) => p.functionCall);
+      if (functionCallParts.length === 0 || isFinalWrapStep) {
+        break;
+      }
+
+      workingContents.push({ role: "model", parts: stepParts });
+
+      const functionResponses = [];
+      for (const fcPart of functionCallParts) {
+        const fc = fcPart.functionCall;
+        const toolCallMeta = {
+          name: fc.name,
+          args: fc.args || {},
+          status: "running",
+        };
+        if (shouldStream) {
+          sendSse(res, { ag_event: "tool_start", tool: toolCallMeta });
+        }
+
+        const { output } = await executeToolCall(fc.name, fc.args || {}, {
+          githubToken: effectiveGithubToken,
+          onArtifact: (art) => {
+            createdArtifacts.push(art);
+            if (shouldStream) sendSse(res, { ag_event: "artifact", artifact: art });
+          },
+          onRuleSaved: (rule) => {
+            savedRules.push(rule);
+            if (shouldStream) sendSse(res, { ag_event: "rule_saved", rule });
+          },
+        });
+
+        const completedTool = {
+          name: fc.name,
+          args: fc.args || {},
+          status: output?.error ? "error" : "done",
+          resultPreview: extractCompactPreview(output),
+        };
+        executedTools.push(completedTool);
+        if (shouldStream) {
+          sendSse(res, { ag_event: "tool_done", tool: completedTool });
+        }
+
+        functionResponses.push({
+          functionResponse: {
+            ...(fc.id ? { id: fc.id } : {}),
+            name: fc.name,
+            response: { result: output },
+          },
+        });
+      }
+
+      workingContents.push({ role: "user", parts: functionResponses });
+    }
+
+    if (shouldStream) {
+      if (!sseHeadersSent) ensureSseHeaders(finalModelUsed);
+      sendSse(res, { ag_event: "done", model: finalModelUsed });
       return res.end();
     }
 
-    const data = await apiRes.json();
-    const parts = data.candidates?.[0]?.content?.parts || [];
     let thinking = "";
     let cleanContent = "";
-    for (const part of parts) {
+    for (const part of finalNonStreamParts) {
       if (!part.text) continue;
       if (part.thought) thinking += part.text;
       else cleanContent += part.text;
@@ -193,8 +463,18 @@ Wrap brief internal reasoning in <thinking>...</thinking> tags before the final 
     }
 
     res.statusCode = 200;
+    res.setHeader("X-Antigravity-Model", finalModelUsed);
     res.setHeader("Content-Type", "application/json");
-    return res.end(JSON.stringify({ content: cleanContent, thinking }));
+    return res.end(
+      JSON.stringify({
+        content: cleanContent,
+        thinking,
+        model: finalModelUsed,
+        tools: executedTools,
+        artifacts: createdArtifacts,
+        rules: savedRules,
+      })
+    );
   } catch (error) {
     console.error("Proxy Gemini error:", error);
     if (!res.headersSent) {
@@ -202,6 +482,9 @@ Wrap brief internal reasoning in <thinking>...</thinking> tags before the final 
       res.setHeader("Content-Type", "application/json");
       return res.end(JSON.stringify({ error: error.message }));
     }
+    try {
+      sendSse(res, { ag_event: "error", error: error.message });
+    } catch (e) {}
     return res.end();
   }
 };
