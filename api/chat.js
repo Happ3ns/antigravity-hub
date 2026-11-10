@@ -111,16 +111,36 @@ Wrap brief internal reasoning in <thinking>...</thinking> tags before the final 
   });
 
   const shouldStream = stream !== false;
-  const endpoint = shouldStream
-    ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(activeKey)}`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent?key=${encodeURIComponent(activeKey)}`;
+  const candidateModels = [
+    ...new Set([targetModel, "gemini-3.5-flash-lite", "gemini-2.5-flash"]),
+  ];
+  const retryStatuses = new Set([404, 429, 503]);
 
   try {
-    const apiRes = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload,
-    });
+    let apiRes = null;
+    let activeModel = targetModel;
+
+    for (let i = 0; i < candidateModels.length; i++) {
+      activeModel = candidateModels[i];
+      const endpoint = shouldStream
+        ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(activeModel)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(activeKey)}`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(activeModel)}:generateContent?key=${encodeURIComponent(activeKey)}`;
+
+      apiRes = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      });
+
+      if (
+        apiRes.ok ||
+        !retryStatuses.has(apiRes.status) ||
+        i === candidateModels.length - 1
+      ) {
+        break;
+      }
+      await apiRes.body?.cancel?.().catch(() => {});
+    }
 
     if (!apiRes.ok) {
       let errMessage = `Gemini API HTTP ${apiRes.status}`;
@@ -134,6 +154,8 @@ Wrap brief internal reasoning in <thinking>...</thinking> tags before the final 
       res.setHeader("Content-Type", "application/json");
       return res.end(JSON.stringify({ error: errMessage }));
     }
+
+    res.setHeader("X-Antigravity-Model", activeModel);
 
     if (shouldStream && apiRes.body) {
       res.writeHead(200, {
