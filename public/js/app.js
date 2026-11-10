@@ -616,8 +616,12 @@
         if (auto.cadence === "interval") {
           const mins = parseInt((auto.schedule || "").replace(/\D/g, "") || "30", 10);
           const intervalMs = mins * 60 * 1000;
-          const last = auto.lastRunTimestamp || 0;
-          if (now - last >= intervalMs) {
+          if (!auto.lastRunTimestamp) {
+            auto.lastRunTimestamp = now;
+            Store.updateAutomation(auto.id, auto);
+            return;
+          }
+          if (now - auto.lastRunTimestamp >= intervalMs) {
             shouldTrigger = true;
           }
         } else if (auto.cadence === "daily") {
@@ -637,13 +641,7 @@
           auto.lastRun = `Today, ${nowDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
           auto.lastRunTimestamp = now;
           Store.updateAutomation(auto.id, auto);
-          showToast(`⚡ Automation Fired: ${auto.title}`);
-
-          if (activeSession) {
-            const input = document.getElementById("promptInput");
-            if (input) input.value = auto.prompt;
-            sendMessage();
-          }
+          showToast(`⚡ Scheduled Automation Ready: ${auto.title}`);
         }
       });
     }, 25000);
@@ -881,8 +879,12 @@
     const newChatBtn = document.getElementById("newChatBtn");
     const searchInput = document.getElementById("sessionSearchInput");
 
+    if (sidebar && window.innerWidth <= 1024) {
+      sidebar.classList.add("collapsed");
+    }
+
     toggleBtn?.addEventListener("click", () => {
-      sidebar.classList.toggle("collapsed");
+      sidebar?.classList.toggle("collapsed");
     });
 
     newChatBtn?.addEventListener("click", () => {
@@ -989,10 +991,8 @@
     const currentModel = Store.getModel();
     const map = {
       "gemini-3.8-flash": "✨ Gemini 3.8 Flash",
-      "gemini-2.5-flash": "⚡ Gemini 2.5 Flash",
-      "gemini-2.5-pro": "🧠 Gemini 2.5 Pro",
-      "gemini-2.0-flash-thinking-exp": "🔬 2.0 Flash Thinking",
-      "gemini-2.0-flash": "🚀 Gemini 2.0 Flash"
+      "gemini-4-argon": "🧠 Gemini 4 Argon",
+      "gemini-3.5-flash-lite": "🚀 Gemini 3.5 Flash-Lite"
     };
     if (textEl) {
       textEl.textContent = map[currentModel] || `✨ ${currentModel}`;
@@ -1128,13 +1128,21 @@
 
     sendBtn.addEventListener("click", sendMessage);
 
-    function launchInteractiveDemo() {
+    let lastDemoLaunchAt = 0;
+    function launchInteractiveDemo(customPrompt) {
+      const now = Date.now();
+      if (now - lastDemoLaunchAt < 650) return;
+      lastDemoLaunchAt = now;
+
       try {
-        const modal = document.getElementById("settingsModal");
-        if (modal && modal.open) modal.close();
+        document.getElementById("settingsModal")?.close();
+        document.getElementById("customizationsModal")?.close();
+        if (window.innerWidth <= 1024) {
+          document.getElementById("appSidebar")?.classList.add("collapsed");
+        }
       } catch (e) {}
 
-      showToast("⚡ Launching interactive agent simulation...", "info");
+      showToast("⚡ Running interactive agent simulation...");
 
       const input = document.getElementById("promptInput");
       if (input) {
@@ -1142,9 +1150,11 @@
         input.style.height = "auto";
       }
 
-      createNewSession("Demo: Agent Architecture & Tools");
+      const demoPrompt = (typeof customPrompt === "string" && customPrompt.trim())
+        ? customPrompt.trim()
+        : "/plan Architect autonomous AI agent with 24 MCP plugins, subagents fleet, and background automations";
 
-      const demoPrompt = "/plan Architect autonomous AI agent with 24 MCP plugins, subagents fleet, and background automations";
+      createNewSession("Demo: Interactive Studio");
 
       const stream = document.getElementById("chatStream");
       const userMsg = document.createElement("div");
@@ -1155,36 +1165,11 @@
       activeSession.messages.push({ role: "user", content: demoPrompt, created_at: new Date().toISOString() });
       saveActiveSession();
 
-      const thinkingEl = document.createElement("div");
-      thinkingEl.className = "chat-msg assistant thinking-active";
-      thinkingEl.innerHTML = `
-        <div class="assistant-header">
-          <div class="assistant-avatar">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(30 12 12)"/>
-              <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)"/>
-            </svg>
-          </div>
-          <span class="assistant-title">Antigravity</span>
-          <span class="assistant-model-tag">${Store.getModel()}</span>
-        </div>
-        <div style="padding: 10px 14px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; margin-top: 8px; font-family: var(--font-mono); font-size: 12.5px; color: #a5b4fc; display: flex; align-items: center; gap: 8px;">
-          <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#818cf8; box-shadow:0 0 8px #818cf8; animation:pulse 1s infinite;"></span>
-          <span>Simulating multi-agent reasoning across 24 God Plugins & MCP fleet...</span>
-        </div>
-      `;
-      stream.appendChild(thinkingEl);
-      stream.scrollTop = stream.scrollHeight;
-
-      setTimeout(() => {
-        thinkingEl.remove();
-        handleLocalAgentResponse(demoPrompt);
-      }, 600);
+      handleLocalAgentResponse(demoPrompt, "", { isDemo: true });
     }
 
-    document.getElementById("interactiveDemoBtn")?.addEventListener("click", launchInteractiveDemo);
-    document.getElementById("runDemoModeBtn")?.addEventListener("click", launchInteractiveDemo);
+    document.getElementById("interactiveDemoBtn")?.addEventListener("click", () => launchInteractiveDemo());
+    document.getElementById("runDemoModeBtn")?.addEventListener("click", () => launchInteractiveDemo());
     root.launchInteractiveDemo = launchInteractiveDemo;
   }
 
@@ -1215,6 +1200,26 @@
   }
 
   // 10. Real-Time Streaming & Local Agent Engine
+  function buildSanitizedContents(messages) {
+    const normalized = [];
+    const recent = (messages || []).slice(-10);
+
+    recent.forEach(msg => {
+      if (!msg.content || typeof msg.content !== "string") return;
+      const role = msg.role === "assistant" ? "model" : "user";
+      if (normalized.length > 0 && normalized[normalized.length - 1].role === role) {
+        normalized[normalized.length - 1].parts[0].text += "\n\n" + msg.content;
+      } else {
+        normalized.push({ role, parts: [{ text: msg.content }] });
+      }
+    });
+
+    while (normalized.length > 0 && normalized[0].role !== "user") {
+      normalized.shift();
+    }
+    return normalized;
+  }
+
   async function callAgentStream(prompt) {
     const stream = document.getElementById("chatStream");
     const apiKey = Store.getApiKey();
@@ -1230,17 +1235,12 @@
     stream.appendChild(streamingEl.element);
     stream.scrollTop = stream.scrollHeight;
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
 
-    const contents = [];
-    (activeSession.messages.slice(-6) || []).forEach(msg => {
-      if (msg.content) {
-        contents.push({
-          role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }]
-        });
-      }
-    });
+    const contents = buildSanitizedContents(activeSession.messages);
+    if (contents.length === 0) {
+      contents.push({ role: "user", parts: [{ text: prompt }] });
+    }
 
     // Inject active user rules, skills, God Plugins & MCP servers into system prompt
     const userRules = Store.getRules();
@@ -1263,9 +1263,9 @@ ${activeSkills || "None"}
 User Instructions & AGENTS.md Rules:
 ${userRules}
 
+Be direct, conversational, helpful, and crisp like an experienced pair programmer and tutor.
 Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $...$ inline), and code blocks with language tags.
-You have full access and operational awareness of all active God Plugins and Custom MCP Servers. When the user requests tasks involving Figma, Notion, Supabase, Linear, GitHub, Python Sandbox, BioMol Science Suite, Canva, Stripe, Railway/Netlify, or custom MCP servers, format and describe your tool invocations or execute them.
-Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final answer.`;
+Wrap internal reasoning briefly in <thinking>...</thinking> tags before the final answer.`;
 
     try {
       const response = await fetch(endpoint, {
@@ -1273,16 +1273,19 @@ Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: contents,
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          generationConfig: {
-            temperature: 0.7
-          }
+          systemInstruction: { parts: [{ text: systemInstruction }] }
         })
       });
 
       if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini API: ${errText}`);
+        let errMessage = `HTTP ${response.status}`;
+        try {
+          const errJson = await response.json();
+          errMessage = errJson?.error?.message || errMessage;
+        } catch (e) {
+          errMessage = await response.text().catch(() => errMessage);
+        }
+        throw new Error(errMessage);
       }
 
       const reader = response.body.getReader();
@@ -1290,7 +1293,7 @@ Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final
       let fullText = "";
       let thinkingBuffer = "";
       let bodyBuffer = "";
-      let inThinking = false;
+      let thinkingFinalized = false;
       let buffer = "";
 
       while (true) {
@@ -1302,42 +1305,51 @@ Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr || jsonStr === "[DONE]") continue;
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr || jsonStr === "[DONE]") continue;
 
-            try {
-              const data = JSON.parse(jsonStr);
-              const chunk = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-              if (chunk) {
-                fullText += chunk;
+          try {
+            const data = JSON.parse(jsonStr);
+            const parts = data.candidates?.[0]?.content?.parts || [];
+            for (const part of parts) {
+              if (!part.text) continue;
 
-                if (fullText.includes("<thinking>")) {
-                  inThinking = true;
-                  const parts = fullText.split("<thinking>");
-                  const afterOpen = parts[1] || "";
-                  if (afterOpen.includes("</thinking>")) {
-                    inThinking = false;
-                    const subParts = afterOpen.split("</thinking>");
-                    thinkingBuffer = subParts[0];
-                    bodyBuffer = subParts[1] || "";
-                    streamingEl.updateThinking(thinkingBuffer);
-                    streamingEl.finalizeThinking();
-                    streamingEl.updateBody(bodyBuffer);
-                  } else {
-                    thinkingBuffer = afterOpen;
-                    streamingEl.updateThinking(thinkingBuffer);
-                  }
-                } else {
-                  bodyBuffer = fullText;
-                  streamingEl.finalizeThinking();
-                  streamingEl.updateBody(bodyBuffer);
-                }
-
-                stream.scrollTop = stream.scrollHeight;
+              if (part.thought) {
+                thinkingBuffer += part.text;
+                streamingEl.updateThinking(thinkingBuffer);
+                continue;
               }
-            } catch (err) {}
-          }
+
+              fullText += part.text;
+
+              if (fullText.includes("<thinking>")) {
+                const splitOpen = fullText.split("<thinking>");
+                const afterOpen = splitOpen[1] || "";
+                if (afterOpen.includes("</thinking>")) {
+                  const subParts = afterOpen.split("</thinking>");
+                  thinkingBuffer = (splitOpen[0] ? "" : thinkingBuffer) || subParts[0].trim();
+                  bodyBuffer = (splitOpen[0] || "") + subParts.slice(1).join("</thinking>");
+                  streamingEl.updateThinking(thinkingBuffer);
+                  if (!thinkingFinalized) {
+                    streamingEl.finalizeThinking();
+                    thinkingFinalized = true;
+                  }
+                  streamingEl.updateBody(bodyBuffer);
+                } else {
+                  streamingEl.updateThinking(afterOpen);
+                }
+              } else {
+                bodyBuffer = fullText;
+                if (!thinkingFinalized) {
+                  streamingEl.finalizeThinking();
+                  thinkingFinalized = true;
+                }
+                streamingEl.updateBody(bodyBuffer);
+              }
+            }
+            stream.scrollTop = stream.scrollHeight;
+          } catch (err) {}
         }
       }
 
@@ -1358,8 +1370,171 @@ Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final
     }
   }
 
-  // 11. Instant Local Agent Engine
-  function handleLocalAgentResponse(prompt, fallbackErrorReason = "") {
+  // 11. Conversational Local Chatbot & Streaming Simulation Engine
+  function generateNaturalReply(prompt, mode) {
+    const lower = prompt.toLowerCase().trim();
+    const historyCount = activeSession?.messages?.length || 0;
+
+    // Greetings & meta chat
+    if (/^(hi|hello|hey|yo|hii+|sup|good (morning|afternoon|evening)|howdy)\b/i.test(lower)) {
+      return {
+        thinking: "Recognizing casual greeting. Responding naturally and checking what Akshat wants to focus on.",
+        tools: [],
+        text: [
+          "Hey Akshat! What are we building or studying right now?",
+          "",
+          "I can help with:",
+          "- **Coding & Debugging** — Python, JS, algorithms, or checking your GitHub repos",
+          "- **JEE Math & Physics** — step-by-step derivations rendered with KaTeX",
+          "- **Singapore Admissions** — SMU SCIS / NUS prep and talking points for your projects",
+          "- **Tool Demos** — try `/plan`, `/quiz`, `/python`, or `/mcp`",
+          "",
+          "Just tell me what you're working on!"
+        ].join("\n")
+      };
+    }
+
+    if (/(who are you|what are you|how are you|like a chatbot|like u|why aren't you|not working|help me$)/i.test(lower)) {
+      const keyStatus = Store.getApiKey() ? "cloud fallback active" : "no Gemini API key set yet";
+      return {
+        thinking: "Explaining how Antigravity Studio works in Offline Simulation mode vs live Gemini 3.8 Flash cloud mode.",
+        tools: [],
+        text: [
+          `I'm **Antigravity Studio**, your iPad & Web coding pair-programmer!`,
+          "",
+          `Right now you're talking to the **built-in browser simulation engine** (${keyStatus}), which handles conversational coding, JEE math, admissions prep, and simulated MCP plugins offline.`,
+          "",
+          "To unlock full open-ended cloud AI streaming on `gemini-3.8-flash`:",
+          "1. Open **Settings** (gear icon in sidebar bottom)",
+          "2. Paste your free key from [Google AI Studio](https://aistudio.google.com/app/apikey)",
+          "3. Tap **Save & Apply** — every prompt will stream live tokens directly from Google's servers!",
+          "",
+          "Meanwhile, ask me a specific coding, JEE math/physics, or Singapore interview question right now and I'll walk through it with you."
+        ].join("\n")
+      };
+    }
+
+    // Specific Coding / Algorithm Questions
+    if (/(binary search|quicksort|merge sort|dfs|bfs|linked list|dynamic programming|recursion|python|javascript|typescript|react|sql|sort|algorithm|big-?o|function|debug|fix this|code)/i.test(lower)) {
+      let lang = "python";
+      let topicTitle = "Binary Search ($O(\\log n)$)";
+      let codeSnippet = [
+        "def binary_search(arr: list[int], target: int) -> int:",
+        "    lo, hi = 0, len(arr) - 1",
+        "    while lo <= hi:",
+        "        mid = lo + (hi - lo) // 2",
+        "        if arr[mid] == target:",
+        "            return mid",
+        "        elif arr[mid] < target:",
+        "            lo = mid + 1",
+        "        else:",
+        "            hi = mid - 1",
+        "    return -1"
+      ].join("\n");
+
+      if (/(sort|quicksort|mergesort)/i.test(lower)) {
+        topicTitle = "Merge Sort ($O(n \\log n)$ Worst Case)";
+        codeSnippet = [
+          "def merge_sort(arr: list[int]) -> list[int]:",
+          "    if len(arr) <= 1:",
+          "        return arr",
+          "    mid = len(arr) // 2",
+          "    left = merge_sort(arr[:mid])",
+          "    right = merge_sort(arr[mid:])",
+          "    return merge(left, right)"
+        ].join("\n");
+      } else if (/(javascript|js|react|async|fetch|promise)/i.test(lower)) {
+        lang = "javascript";
+        topicTitle = "Clean Async Fetch Helper (JavaScript)";
+        codeSnippet = [
+          "async function fetchJson(url, options = {}) {",
+          "  const res = await fetch(url, options);",
+          "  if (!res.ok) {",
+          "    throw new Error('HTTP ' + res.status);",
+          "  }",
+          "  return res.json();",
+          "}"
+        ].join("\n");
+      } else if (/(dp|dynamic programming|memo|fibonacci|knapsack)/i.test(lower)) {
+        topicTitle = "Bottom-Up Dynamic Programming ($O(n)$ Time, $O(1)$ Space)";
+        codeSnippet = [
+          "def climb_stairs(n: int) -> int:",
+          "    if n <= 2:",
+          "        return n",
+          "    prev, curr = 1, 2",
+          "    for _ in range(3, n + 1):",
+          "        prev, curr = curr, prev + curr",
+          "    return curr"
+        ].join("\n");
+      }
+
+      return {
+        thinking: `Analyzing programming query ("${prompt.slice(0, 60)}"). Selecting modular pattern in ${mode.toUpperCase()} mode and verifying Big-O bounds.`,
+        tools: [{ name: "python_sandbox_run", args: { verify: topicTitle } }],
+        text: `Here is a clean pattern for **${topicTitle}**:\n\n\`\`\`${lang}\n${codeSnippet}\n\`\`\`\n\n**Key edge cases to watch:**\n- Empty or single-element input guards before indexing\n- Bounds checks on loop termination\n\nPaste your exact code snippet or error trace if you'd like me to debug a specific bug!`
+      };
+    }
+
+    // JEE Physics / Calculus / Mathematics Questions
+    if (/(integral|derivative|differentiate|calculus|matrix|determinant|vector|quadratic|roots|gauss|maxwell|electric|magnetic|kinematics|torque|inertia|optics|thermodynamics|entropy|chemistry|organic|physics|math|solve|formula|prove)/i.test(lower)) {
+      let subject = "Calculus & Algebra";
+      let mathSection = "For $ax^2 + bx + c = 0$, the quadratic roots are:\n$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$";
+
+      if (/(integral|calculus|derivative|differentiate|limit)/i.test(lower)) {
+        subject = "Calculus Core Identity";
+        mathSection = "1. **Integration by Parts:**\n$$\\int u \\, dv = uv - \\int v \\, du$$\n2. **Leibniz Rule (Differentiation under the integral sign):**\n$$\\frac{d}{dx} \\int_{a(x)}^{b(x)} f(t)\\,dt = f(b(x))b'(x) - f(a(x))a'(x)$$";
+      } else if (/(gauss|electric|magnetic|maxwell|physics|capacitor|torque|kinematics|inertia)/i.test(lower)) {
+        subject = "Electromagnetism & Classical Mechanics";
+        mathSection = "1. **Gauss's Law:**\n$$\\oint \\vec{E} \\cdot d\\vec{A} = \\frac{Q_{\\text{enc}}}{\\varepsilon_0}$$\n2. **Rotational Dynamics:**\n$$\\vec{\\tau}_{\\text{ext}} = \\frac{d\\vec{L}}{dt} = I\\vec{\\alpha}$$";
+      } else if (/(thermodynamics|entropy|chemistry|organic|mole|equilibrium)/i.test(lower)) {
+        subject = "Physical & Chemical Equilibrium";
+        mathSection = "**Gibbs Free Energy & Equilibrium Constant:**\n$$\\Delta G^\\circ = \\Delta H^\\circ - T\\Delta S^\\circ = -RT \\ln K$$";
+      }
+
+      return {
+        thinking: `Identifying JEE ${subject} topic from user query. Formatting first-principles equations with KaTeX.`,
+        tools: [{ name: "evaluate_math", args: { topic: subject } }],
+        text: `### 📐 ${subject}\n\n${mathSection}\n\nDrop the exact question numbers or boundary conditions you want solved and we'll walk through the steps together!`
+      };
+    }
+
+    // Singapore Admissions / Portfolio / GitHub Questions
+    if (/(smu|scis|nus|ntu|singapore|interview|discovery day|admission|github|repo|portfolio|biodiversity|donecheck|weather|jarvis|quiz)/i.test(lower)) {
+      return {
+        thinking: "Cross-referencing Akshat's GitHub portfolio (Happ3ns) and Singapore university criteria (SMU SCIS, NUS, NTU).",
+        tools: [{ name: "github_list_repos", args: { user: "Happ3ns" } }],
+        text: [
+          "### 🏛️ Singapore Admissions & Portfolio Strategy (SMU SCIS / NUS / NTU)",
+          "",
+          "Your GitHub portfolio tells a cohesive story when framed around **real-world engineering & honest evaluation**:",
+          "",
+          "1. **[`singapore-island-biodiversity`](https://happ3ns.github.io/singapore-island-biodiversity/)** *(Top opener)* — Uses Copernicus Sentinel-2 imagery + 22k iNaturalist records over 6 Singapore southern islands. Highlight why XGBoost beat persistence baselines by **33% RMSE**, and why you honestly reported the 10m resolution constraint.",
+          "2. **[`donecheck`](https://github.com/Happ3ns/donecheck)** — Shows systems thinking, automated CI testing, and bash/YAML engineering hygiene.",
+          "3. **[`antigravity-hub`](https://happ3ns.github.io/antigravity-hub/)** & **[`JEE-Quiz-Generator`](https://happ3ns.github.io/JEE-Quiz-Generator/)** — Prove end-to-end UI/UX product craft with client-side persistence.",
+          "",
+          "Want to practice a mock **SMU SCIS Discovery Day** technical question on any of these?"
+        ].join("\n")
+      };
+    }
+
+    // Conversational fallback tailored cleanly to user's prompt
+    const snippet = prompt.trim().slice(0, 120);
+    return {
+      thinking: `Parsing conversational prompt ("${snippet}") in turn ${historyCount + 1}. Formulating direct pair-programmer response.`,
+      tools: [],
+      text: [
+        `Let's break down **"${snippet}"** in **${mode.toUpperCase()}** mode:`,
+        "",
+        "1. **Pin down the exact scope:** Share the specific code file, formula, or constraint you're dealing with.",
+        "2. **Use fast tools when helpful:** Try `/plan` for structured step-by-step plans, `/quiz` for JEE physics/math drills, or `/python` for numerical verification.",
+        `3. **Full cloud AI:** Enter a Google AI Studio key in **Settings** whenever you want unconstrained \`${Store.getModel()}\` streaming responses.`,
+        "",
+        "What exact detail or error would you like me to focus on first?"
+      ].join("\n")
+    };
+  }
+
+  function handleLocalAgentResponse(prompt, fallbackErrorReason = "", options = {}) {
     const stream = document.getElementById("chatStream");
     const lower = prompt.toLowerCase().trim();
 
@@ -1369,7 +1544,7 @@ Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final
     let artifact = null;
 
     if (lower.startsWith("/plan")) {
-      thinking = "Decomposing architectural requirements, milestone phases, and testing strategies.";
+      thinking = "Decomposing architectural requirements, milestone phases, and verification steps.";
       toolCalls.push({
         name: "plan_architect",
         args: { task: prompt.replace("/plan", "").trim() || "Full Stack Application Architecture" }
@@ -1381,104 +1556,97 @@ Wrap internal chain-of-thought in <thinking>...</thinking> tags before the final
 #### Phase 1: Core Foundation & State Isolation
 - [x] Configure spatial Obsidian dark theme tokens and iPad responsive shell.
 - [x] Establish PIN-protected local vault with client-side key storage.
-- [x] Connect live streaming reasoning engine directly to Gemini 2.5 API.
+- [x] Connect live streaming reasoning engine directly to **Gemini 3.8 Flash**.
 
 #### Phase 2: Live Tool Calling & Multi-Agent Execution
-- [x] Integrated back and forward history navigation for standalone iPad PWA.
+- [x] Integrated back/forward history navigation and collapsible mobile drawers.
 - [x] Integrated built-in transparent iPad math & coding keyboard.
-- [x] Created Automations & Schedules manager and Customizations studio (AGENTS.md rules & skills).
-- [ ] Render live KaTeX mathematical formulas:
+- [x] Added Automations & Schedules manager plus 24 God Plugins & Custom MCP connector.
+- [x] Render live KaTeX mathematical formulas:
 $$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$
 
 #### Phase 3: Verification & Studio Deployment
-- [x] Continuous synchronization with desktop brain sessions (\`public/data/synced-sessions.json\`).
-- [x] Verify PWA standalone mode across iPadOS Safari.`;
+- [x] Verified mobile/iPad viewport layouts and interactive demo streaming.`;
 
       artifact = {
         name: "antigravity-plan.md",
+        subtitle: "Architecture Specification & Milestones",
         content: responseText
       };
 
     } else if (lower.startsWith("/quiz")) {
-      thinking = "Generating high-yield JEE Advanced practice questions for Akshat. Topics: Complex Numbers and Quantum Mechanics.";
+      thinking = "Generating high-yield JEE Advanced practice question with step-by-step Electromagnetism proof.";
+      toolCalls.push({ name: "jee_question_bank", args: { topic: "Electromagnetism", level: "JEE Advanced" } });
       responseText = `### 🧪 JEE Advanced Practice Module (Physics & Mathematics)
 
-#### Question 1: Electromagnetism & Field Tensor
-An infinite conducting cylinder of radius $R$ carries a surface current density $\\vec{K} = K_0 \\cos\\theta \\,\\hat{z}$. Determine the magnetic vector potential $\\vec{A}$ inside the cylinder:
+#### Question: Cylindrical Surface Current Field
+An infinite conducting cylinder of radius $R$ carries a surface current density $\\vec{K} = K_0 \\cos\\theta \\,\\hat{z}$. Determine the magnetic field $\\vec{B}$ inside the cylinder:
 
 $$\\vec{\\nabla}^2 \\vec{A} = -\\mu_0 \\vec{J}$$
 
 **Solution Steps:**
-1. Using cylindrical harmonics, the boundary condition at $r = R$ requires:
-$$B_r(R^+) - B_r(R^-) = 0$$
-$$B_\\theta(R^+) - B_\\theta(R^-) = \\mu_0 K_0 \\cos\\theta$$
-2. Integrating yields the uniform interior magnetic field:
+1. Using cylindrical harmonics, matching the tangential discontinuity at $r = R$:
+$$B_r(R^+) - B_r(R^-) = 0, \\quad B_\\theta(R^+) - B_\\theta(R^-) = \\mu_0 K_0 \\cos\\theta$$
+2. Integrating yields a uniform interior magnetic field:
 $$\\vec{B}_{\\text{in}} = \\frac{\\mu_0 K_0}{2} \\hat{y}$$
 
-*Use the transparent math keyboard below to type equations or test this directly in the live Studio Preview!*`;
+*Try typing another Physics or Calculus question anytime — or tap the Math button below for LaTeX keys!*`;
 
     } else if (lower.startsWith("/search")) {
-      thinking = "Executing simulated live web and documentation search across Google DeepMind, SMU SCIS admissions, and GitHub.";
-      toolCalls.push({
-        name: "search_web",
-        args: { query: prompt.replace("/search", "").trim() || "SMU SCIS admission criteria 2026" }
-      });
-      responseText = `**Search Results for:** \`${prompt.replace("/search", "").trim()}\`
+      const q = prompt.replace("/search", "").trim() || "SMU SCIS admission criteria 2026";
+      thinking = `Querying curated admissions & developer knowledge base for "${q}".`;
+      toolCalls.push({ name: "search_web", args: { query: q } });
+      responseText = `**Search Results for:** \`${q}\`
 
 1. **Singapore Management University (SMU) — School of Computing and Information Systems (SCIS)**
-   - High evaluation weighting on algorithmic aptitude, problem-solving portfolios, and active GitHub projects.
-   - Distinctive Discovery Day interview format focusing on technical clarity and initiative.
-
-2. **National University of Singapore (NUS) / NTU Computing**
-   - Rigorous focus on quantitative excellence (JEE/A-Level mathematics) and foundational computer science proficiency.`;
+   - Strong emphasis on applied software engineering, portfolio initiative, and clear communication during Discovery Day interviews.
+2. **National University of Singapore (NUS) & NTU Computing**
+   - High weighting on quantitative rigor (JEE / A-Level mathematics) plus verifiable independent projects.`;
 
     } else if (lower.startsWith("/goal")) {
-      thinking = "Entering autonomous agent goal loop. Establishing sub-tasks, verification milestones, and continuous self-correction.";
-      toolCalls.push({ name: "goal_orchestrator", args: { goal: prompt.replace("/goal", "").trim(), timeout: "unlimited" } });
-      responseText = `🎯 **Goal Initialized:** \`${prompt.replace("/goal", "").trim()}\`
+      const goal = prompt.replace("/goal", "").trim() || "Complete portfolio verification";
+      thinking = "Initializing long-running autonomous goal loop with verification checkpoints.";
+      toolCalls.push({ name: "goal_orchestrator", args: { goal, timeout: "unlimited" } });
+      responseText = `🎯 **Goal Initialized:** \`${goal}\`
 
-Antigravity autonomous agent active. System will persist and auto-execute verification subagents until full completion.`;
+Antigravity autonomous agent active. Breaking goal into testable steps and verifying each file before completion.`;
+
+    } else if (lower.startsWith("/sync")) {
+      thinking = "Triggering desktop brain session sync from synced-sessions.json.";
+      toolCalls.push({ name: "sync_sessions", args: { source: "data/synced-sessions.json" } });
+      document.getElementById("syncNowBtn")?.click();
+      responseText = `🔄 **PC Session Sync Triggered** — Pulling latest Antigravity conversation history into your sidebar.`;
 
     } else if (lower.startsWith("/mcp") || lower === "mcp") {
       const plugins = Store.getPlugins().filter(p => p.enabled);
       const customServers = Store.getCustomMcpServers();
       thinking = "Inspecting connected Model Context Protocol (MCP) servers and tool registries.";
       toolCalls.push({ name: "mcp_list_tools", args: { filter: "all_connected" } });
-
       responseText = `### 🔌 Model Context Protocol (MCP) Server Status
 
 **Connected God Plugins (${plugins.length} Active):**
 ${plugins.map(p => `- **${p.icon} ${p.name}** (${p.category}): \`${p.tools.join("`, `")}\``).join("\n")}
 
 **Custom MCP Servers (${customServers.length} Active):**
-${customServers.length > 0 ? customServers.map(s => `- **${s.name}** [${s.transport.toUpperCase()}]: \`${s.endpoint}\` (${s.status || "Connected"})`).join("\n") : "_No custom MCP endpoints connected. Add one via **Customise > + Add Custom MCP**!_"}
-
-> [!TIP]
-> You can trigger any MCP tool directly or configure additional private servers via the **Customise** menu in the top bar.`;
+${customServers.length > 0 ? customServers.map(s => `- **${s.name}** [${(s.transport || "sse").toUpperCase()}]: \`${s.endpoint}\` (${s.status || "Connected"})`).join("\n") : "_No custom MCP endpoints connected yet. Add one via **Customise > + Add Custom MCP**!_"}`;
 
     } else if (lower.startsWith("/plugins") || lower === "plugins") {
       const allPlugins = Store.getPlugins();
       thinking = "Reading installed extensions catalog and God Plugins registry.";
-      responseText = `### 🧩 Antigravity God Plugins Catalog
+      responseText = `### 🧩 Antigravity God Plugins Catalog (${allPlugins.length} Total)
 
-| Plugin | Category | Status | Available Tools |
+| Plugin | Category | Status | Tools |
 | :--- | :--- | :--- | :--- |
-${allPlugins.map(p => `| **${p.icon} ${p.name}** | ${p.category} | ${p.enabled ? "🟢 Active" : "⚪ Disabled"} | \`${p.tools.slice(0, 2).join(", ")}${p.tools.length > 2 ? "..." : ""}\` |`).join("\n")}
+${allPlugins.slice(0, 12).map(p => `| **${p.icon} ${p.name}** | ${p.category} | ${p.enabled ? "🟢 Active" : "⚪ Off"} | \`${p.tools.slice(0, 2).join(", ")}\` |`).join("\n")}
 
-*To enable/disable plugins or configure API tokens, tap **Customise** in the top bar.*`;
+*Tap **Customise** in the top bar to toggle all ${allPlugins.length} plugins or configure tokens.*`;
 
     } else if (lower.startsWith("/figma")) {
-      thinking = "Invoking Figma MCP: querying design tokens, layout hierarchy, and Code Connect mappings.";
+      thinking = "Invoking Figma MCP: querying design tokens and Code Connect mappings.";
       toolCalls.push({ name: "figma_get_design_context", args: { file_key: "antigravity-ipad-shell", node_id: "0:1" } });
       responseText = `### 🎨 Figma MCP Integration
-**Connected File:** \`Antigravity iPadOS Studio UI\`
-- **Inspected Frames:** Top Navigation Bar, Chat Stream Canvas, Translucent Math Pad, Studio Pane.
-- **Color Tokens:**
-  - \`--bg-deep\`: \`#040508\`
-  - \`--bg-card\`: \`#0c101c\`
-  - \`--accent-indigo\`: \`#6366f1\`
-  - \`--accent-cyan\`: \`#06b6d4\`
-- **Code Connect Snippet:**
+**File:** \`Antigravity iPadOS Studio UI\`
+- **Tokens:** \`--bg-deep: #040508\`, \`--bg-card: #0c101c\`, \`--accent-indigo: #6366f1\`, \`--accent-cyan: #06b6d4\`
 \`\`\`tsx
 export function AntigravityTopBar({ title, model }: TopBarProps) {
   return (
@@ -1492,236 +1660,159 @@ export function AntigravityTopBar({ title, model }: TopBarProps) {
 \`\`\``;
 
     } else if (lower.startsWith("/supabase")) {
-      thinking = "Executing Supabase MCP: inspecting database schema and active tables.";
+      thinking = "Executing Supabase MCP: inspecting Postgres schema and RLS policies.";
       toolCalls.push({ name: "supabase_execute_sql", args: { query: "SELECT table_name FROM information_schema.tables WHERE table_schema='public';" } });
       responseText = `### ⚡ Supabase Postgres MCP
 
-**Executed Query:** \`SELECT table_name FROM information_schema.tables WHERE table_schema='public';\`
-
-| Table Name | Records | Row Level Security (RLS) | Last Modified |
+| Table | Rows | RLS | Status |
 | :--- | :--- | :--- | :--- |
-| \`admissions_milestones\` | 18 | Enabled 🔒 | Today, 14:20 |
-| \`jee_quiz_bank\` | 412 | Enabled 🔒 | Today, 08:00 |
-| \`user_preferences\` | 1 | Enabled 🔒 | 5 mins ago |
-| \`synced_sessions\` | 24 | Enabled 🔒 | Just now |
-
-> All queries executed safely via client-side Supabase MCP bridge.`;
+| \`admissions_milestones\` | 18 | Enabled 🔒 | Healthy |
+| \`jee_quiz_bank\` | 450 | Enabled 🔒 | Healthy |
+| \`synced_sessions\` | 24 | Enabled 🔒 | Healthy |`;
 
     } else if (lower.startsWith("/notion")) {
-      thinking = "Querying Notion Workspace MCP for application trackers and Singapore university wikis.";
+      thinking = "Querying Notion Workspace MCP for Singapore university trackers.";
       toolCalls.push({ name: "notion_query_data_sources", args: { database: "Singapore Admissions Tracker 2026" } });
       responseText = `### 📝 Notion Workspace MCP
-
 **Database:** \`Singapore Admissions Tracker 2026\`
-- **SMU SCIS (BSc Computing):** Application submitted. Discovery Day technical interview preparation in progress.
-- **NUS Computing:** Algorithmic portfolio & JEE Advanced rank verification ready.
-- **NTU College of Computing & Data Science:** Standard evaluation track.
-
-*Page \`2026-Preparation-Log\` synced successfully.*`;
+- **SMU SCIS (BSc Computing):** Discovery Day preparation active.
+- **NUS / NTU Computing:** Portfolio & JEE verification ready.`;
 
     } else if (lower.startsWith("/science")) {
-      thinking = "Invoking Science & BioMol MCP: fetching PDB structural coordinates and ChEMBL binding assays.";
+      thinking = "Invoking Science & BioMol MCP: fetching PDB structural coordinates and ChEMBL assays.";
       toolCalls.push({ name: "pdb_fetch_structure", args: { pdb_id: "6LU7" } });
       responseText = `### 🔬 Science & BioMol MCP
-
-**PDB Entry:** \`6LU7\` (SARS-CoV-2 Main Protease Complexed with Inhibitor N3)
-- **Resolution:** 2.16 Å (X-ray diffraction)
-- **Organism:** Severe acute respiratory syndrome coronavirus 2
-- **ChEMBL Assays:** 14 bioactivity records with $IC_{50} < 100\\,\\text{nM}$.
-- **Catalytic Dyad:** Cys145 - His41 pocket confirmed.`;
+**PDB Entry:** \`6LU7\` (SARS-CoV-2 Main Protease + N3 Inhibitor)
+- **Resolution:** 2.16 Å · **ChEMBL Hits:** 14 compounds with $IC_{50} < 100\\,\\text{nM}$ · **Catalytic Dyad:** Cys145–His41.`;
 
     } else if (lower.startsWith("/python")) {
-      thinking = "Dispatching code block to isolated Python Sandbox runtime.";
-      toolCalls.push({ name: "python_sandbox_run", args: { code: prompt.replace("/python", "").trim() || "import numpy as np; print(np.pi)" } });
+      thinking = "Executing Python numerical verification in isolated runtime.";
+      toolCalls.push({ name: "python_sandbox_run", args: { code: prompt.replace("/python", "").trim() || "gaussian_integral.py" } });
       responseText = `### 🐍 Python Sandbox Execution
-
 \`\`\`python
-# Executed in sandboxed WebAssembly / microVM runtime
 import numpy as np
 import scipy.integrate as integrate
 
-# Verification of Gaussian Integral
 result, error = integrate.quad(lambda x: np.exp(-x**2), -np.inf, np.inf)
-print(f"Result: {result:.10f}")
-print(f"Analytical sqrt(pi): {np.sqrt(np.pi):.10f}")
+print(f"Numerical: {result:.10f} | Analytical: {np.sqrt(np.pi):.10f}")
 \`\`\`
-
-**Standard Output:**
-\`\`\`
-Result: 1.7724538509
-Analytical sqrt(pi): 1.7724538509
-Code executed successfully in 14ms (0 errors).
-\`\`\``;
+**Output:** \`Numerical: 1.7724538509 | Analytical: 1.7724538509 (0 errors, 14ms)\``;
 
     } else if (lower.startsWith("/subagents") || lower.startsWith("/teamwork")) {
       const subagents = Store.getSubagents();
-      thinking = "Enumerating desktop Antigravity autonomous subagent registry and active dispatch capabilities.";
+      thinking = "Enumerating Antigravity autonomous subagent fleet.";
       toolCalls.push({ name: "subagents_list_fleet", args: {} });
       responseText = `### 🤖 Antigravity Autonomous Subagent Fleet
 
-Desktop Antigravity multi-agent architecture running on iPadOS:
-
-| Subagent | Role | Default Model | Key Tool Capabilities |
+| Subagent | Role | Model | Tools |
 | :--- | :--- | :--- | :--- |
-${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.toUpperCase()}\` | ${a.tools.join(", ")} |`).join("\n")}
-
-> [!TIP]
-> Dispatch any subagent immediately using \`/dispatch <subagent-id> <instruction>\` or tap **Customise > Subagents Hub**!`;
+${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.toUpperCase()}\` | ${a.tools.slice(0, 2).join(", ")} |`).join("\n")}`;
 
     } else if (lower.startsWith("/dispatch")) {
       const parts = prompt.split(" ");
       const agentId = parts[1] || "research";
       const task = parts.slice(2).join(" ") || "Execute assigned subagent workflow.";
-      thinking = `Spawning isolated subagent instance: [${agentId}]. Allocating child context window and sandboxed memory.`;
+      thinking = `Spawning isolated subagent [${agentId}] in branched context.`;
       toolCalls.push({ name: "invoke_subagent", args: { TypeName: agentId, Role: "Specialist", Prompt: task } });
-      responseText = `🚀 **Subagent Dispatched:** \`${agentId}\`
-- **Assigned Task:** "${task}"
-- **Isolation Mode:** Branched workspace context (zero parent transcript clutter).
-- **Status:** Running background analysis...
-
-*Subagent completed execution with status: 0 errors.*`;
+      responseText = `🚀 **Subagent Dispatched:** \`${agentId}\`\n- **Task:** "${task}"\n- **Result:** Completed cleanly (0 errors).`;
 
     } else if (lower.startsWith("/schedule") || lower.startsWith("/automation")) {
-      thinking = "Parsing automation schedule cadence and configuring background cron timer.";
-      toolCalls.push({ name: "schedule_create", args: { prompt: prompt } });
+      thinking = "Opening Automations Studio and refreshing cron schedules.";
+      toolCalls.push({ name: "schedule_create", args: { prompt } });
       document.getElementById("automationsModal")?.showModal();
       renderAutomationsList();
-      responseText = `⚡ **Automations Studio Opened**
-- View your active background timers, interval sweeps, and scheduled agent jobs.
-- Tap **+ New Automation** to configure custom cadences (Daily, Weekly, Interval, or Cron).`;
+      responseText = `⚡ **Automations Studio Opened** — Manage active cron intervals, timers, and daily sweeps.`;
 
     } else if (lower.startsWith("/browser")) {
       const targetUrl = prompt.replace("/browser", "").trim() || "https://admissions.smu.edu.sg";
-      thinking = `Launching headless browser MCP instance. Navigating to ${targetUrl} and evaluating DOM accessibility.`;
+      thinking = `Auditing DOM accessibility and status at ${targetUrl}.`;
       toolCalls.push({ name: "chrome_navigate", args: { url: targetUrl } });
-      toolCalls.push({ name: "chrome_capture_screenshot", args: {} });
-      responseText = `### 🌐 Chrome Browser Automation MCP
-
-**Navigated to:** \`${targetUrl}\`
-- **HTTP Status:** 200 OK
-- **Viewport:** 1024x768 (iPad landscape emulation)
-- **DOM Audit:** 0 accessibility violations, full semantic HTML structure.
-- **Console Errors:** None.`;
+      responseText = `### 🌐 Browser Audit MCP\n- **Target:** \`${targetUrl}\` · **Status:** \`200 OK\` · **Accessibility:** 0 violations.`;
 
     } else if (lower.startsWith("/grill-me")) {
-      thinking = "Initiating interactive design and architecture interview to resolve ambiguous decisions.";
-      responseText = `### 🎙️ Antigravity Interactive Alignment Interview
-
-I'm ready to grill you on your design decisions to ensure maximum technical rigor. Let's start with Phase 1:
-
-1. **Architecture Trade-off:** For your Singapore admissions portfolio, why choose a client-side PWA with PIN encryption over a traditional server-rendered SSR app?
-2. **State & Sync:** How do you guarantee zero token leaks when synchronizing desktop transcript logs with GitHub Pages?
-3. **Evaluation Metric:** How will you demonstrate your algorithmic problem-solving ability in the SMU SCIS Discovery Day interview?
-
-*Reply directly with your thoughts to proceed to Phase 2!*`;
+      thinking = "Starting interactive architecture interview.";
+      responseText = `### 🎙️ Interactive Design Interview\n1. Why isolate secrets client-side vs a proxy backend for your iPad PWA?\n2. How do you verify AI-generated diffs in \`donecheck\` without executing untrusted prompts?\n\n*Reply with your answer to continue!*`;
 
     } else if (lower.startsWith("/boost")) {
-      thinking = "Activating Boost Mode: engaging multi-perspective verification, formal logic proofs, and self-correction passes.";
-      responseText = `🚀 **Boost Mode Engaged**
-- Reasoning depth set to Maximum (extended chain-of-thought).
-- Cross-checking outputs against formal verification criteria and AGENTS.md constraints.
-- Model latency optimized for precision.`;
+      thinking = "Boost Mode enabled: maximum reasoning depth active.";
+      responseText = `🚀 **Boost Mode Engaged** — Extended verification and first-principles checks enabled.`;
 
     } else if (lower.startsWith("/learn")) {
       const ruleToLearn = prompt.replace("/learn", "").trim();
-      thinking = `Extracting durable learning and persisting into AGENTS.md rules vault: "${ruleToLearn}".`;
+      thinking = "Persisting user preference into AGENTS.md vault.";
       if (ruleToLearn) {
-        const currentRules = Store.getRules();
-        const updatedRules = `${currentRules}\n- [User Rule]: ${ruleToLearn}`;
-        Store.setRules(updatedRules);
+        Store.setRules(`${Store.getRules()}\n- [User Rule]: ${ruleToLearn}`);
         showToast("Learned new rule!");
-        responseText = `✅ **Learned & Persisted to AGENTS.md:**\n> "${ruleToLearn}"\n\nAntigravity will adhere to this constraint across all future sessions.`;
+        responseText = `✅ **Learned & Persisted to AGENTS.md:**\n> "${ruleToLearn}"`;
       } else {
-        responseText = `Usage: \`/learn <instruction to permanently remember>\``;
+        responseText = `Usage: \`/learn <rule to permanently remember>\``;
       }
 
     } else if (lower.startsWith("/compact")) {
-      thinking = "Summarizing prior session trajectory, pruning dead tokens, and isolating key architectural decisions.";
-      responseText = `🧹 **Session Context Compacted**
-- Consolidated previous conversation turns.
-- Preserved active system rules, God Plugins state, and admissions milestones.
-- Context window headroom refreshed.`;
+      thinking = "Compacting session trajectory and preserving active rules.";
+      responseText = `🧹 **Session Context Compacted** — Key decisions preserved.`;
 
-    } else if (lower.startsWith("/vercel")) {
-      thinking = "Invoking Vercel AI & Cloud SDK MCP: checking deployments and edge function metrics.";
-      toolCalls.push({ name: "vercel_inspect_deployment", args: { project: "antigravity-hub" } });
-      responseText = `### ▲ Vercel AI & Cloud SDK MCP
-**Project:** \`antigravity-hub\`
-- **Status:** Ready (Production)
-- **Edge Middleware:** Active (0ms cold start)
-- **AI SDK Runtime:** Streaming SSE enabled
-- **Custom Metrics:** 99.8% cache hit rate on static assets.`;
-
-    } else if (lower.startsWith("/coderabbit")) {
-      thinking = "Invoking CodeRabbit Automated Reviewer MCP: performing SAST audit on local diffs.";
-      toolCalls.push({ name: "coderabbit_sast_audit", args: { target: "public/js" } });
-      responseText = `### 🐇 CodeRabbit Automated Reviewer MCP
-
-**Security & Quality Audit Summary:**
-- **Static Analysis (SAST):** 0 High/Critical vulnerabilities detected.
-- **Secrets Scanning:** Verified 0 leaked API keys, tokens, or hashes.
-- **Type Safety & Linting:** 100% clean across all 4 core scripts.
-- **Recommendation:** Pull request is ready for deployment.`;
-
-    } else if (lower.startsWith("/chrome")) {
-      thinking = "Invoking Chrome DevTools MCP: auditing DOM accessibility (a11y) and layout metrics.";
-      toolCalls.push({ name: "chrome_audit_a11y", args: {} });
-      responseText = `### 🔍 Chrome DevTools & a11y Audit MCP
-
-- **Retina Display Ratio:** 2.0x (Crisp subpixel font rendering confirmed)
-- **Safe Area Insets:** \`env(safe-area-inset-top)\` properly anchored.
-- **Status Bar Blur:** Eradicated (solid dark navigation header).
-- **Contrast Ratio:** 14.8:1 on primary text (AAA compliant).`;
-
-    } else if (lower.startsWith("/arxiv")) {
-      thinking = "Invoking arXiv Academic Literature MCP: searching recent preprints on LLM reasoning architectures.";
-      toolCalls.push({ name: "search_arxiv", args: { query: "agentic reasoning code generation" } });
-      responseText = `### 📚 arXiv Academic Literature MCP
-
-1. **DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning** (arXiv:2501.12948)
-   - Demonstrates emergence of long chain-of-thought reasoning without supervised fine-tuning.
-2. **SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering** (arXiv:2405.15793)
-   - Benchmarking agentic workflows against real-world GitHub issues.`;
+    } else if (lower.startsWith("/vercel") || lower.startsWith("/coderabbit") || lower.startsWith("/chrome") || lower.startsWith("/arxiv")) {
+      const cmd = lower.split(" ")[0];
+      thinking = `Invoking ${cmd} MCP tool pipeline.`;
+      toolCalls.push({ name: `mcp_${cmd.slice(1)}_run`, args: { query: prompt } });
+      responseText = `### ⚡ ${cmd.toUpperCase()} MCP Executed\nCompleted cleanly with 0 errors. Ask any follow-up question or open **Customise > God Plugins** for configuration.`;
 
     } else {
-      thinking = `Processing user query: "${prompt}". Synthesizing response using workspace context and active Antigravity session knowledge.`;
-      responseText = `Hello Akshat! I'm **Antigravity**, your autonomous coding assistant and partner for your Singapore university journey (SMU SCIS, NUS, NTU) and projects.
-
-You can ask me to:
-- ⚡ **Plan architectures & features** with \`/plan\`
-- 🎯 **Run long-range autonomous goals** with \`/goal\`
-- 🧪 **Generate JEE practice questions** with \`/quiz\`
-- 🔍 **Search documentation** with \`/search\`
-- 🔄 **Sync PC conversation history** with \`/sync\`
-- ⚡ **Manage background schedules** with \`/automation\`
-
-${!Store.getApiKey() ? `> [!TIP]
-> **24/7 Cloud Generation:** To enable real-time token streaming with live Gemini 2.5 Flash/Pro, tap the **Settings** gear in the sidebar and paste your [free Google Gemini API Key](https://aistudio.google.com/app/apikey).` : ""}`;
+      const reply = generateNaturalReply(prompt, Store.getMode());
+      thinking = reply.thinking;
+      toolCalls = reply.tools || [];
+      responseText = reply.text;
     }
 
-    const assistantMsgData = {
-      content: responseText,
-      thinking: thinking,
-      tool_calls: toolCalls,
-      artifact: artifact
-    };
+    if (fallbackErrorReason) {
+      responseText = `> [!WARNING]\n> **Cloud API Fallback:** Live request to \`${Store.getModel()}\` failed (\`${fallbackErrorReason}\`). Verify your Gemini API key or switch model in Settings.\n\n${responseText}`;
+    }
 
-    const rendered = Render.buildAssistantMessageElement(assistantMsgData, Store.getModel());
-    stream.appendChild(rendered);
+    // Stream thinking + words smoothly so local & demo responses feel like a live chatbot
+    const streamingEl = Render.createStreamingElement(Store.getModel());
+    stream.appendChild(streamingEl.element);
+    streamingEl.updateThinking(thinking);
     stream.scrollTop = stream.scrollHeight;
 
-    activeSession.messages.push({
-      role: "assistant",
-      content: responseText,
-      thinking: thinking,
-      tool_calls: toolCalls,
-      created_at: new Date().toISOString()
-    });
-    saveActiveSession();
+    const words = responseText.split(/(\s+)/);
+    let idx = 0;
+    let built = "";
 
-    if (artifact) {
-      root.showArtifact(artifact);
-    }
+    setTimeout(() => {
+      streamingEl.finalizeThinking();
+      if (toolCalls.length > 0) streamingEl.setTools(toolCalls);
+      if (artifact) streamingEl.setArtifact(artifact);
+
+      const tick = setInterval(() => {
+        const chunkSize = words.length > 140 ? 6 : 3;
+        for (let k = 0; k < chunkSize && idx < words.length; k++) {
+          built += words[idx++];
+        }
+        streamingEl.updateBody(built);
+        stream.scrollTop = stream.scrollHeight;
+
+        if (idx >= words.length) {
+          clearInterval(tick);
+          streamingEl.finish();
+
+          activeSession.messages.push({
+            role: "assistant",
+            content: responseText,
+            thinking: thinking,
+            tool_calls: toolCalls,
+            artifact: artifact,
+            created_at: new Date().toISOString()
+          });
+          saveActiveSession();
+
+          // Auto-open Studio pane only on wide desktop screens so chat stays visible on iPad/mobile
+          if (artifact && window.innerWidth >= 1200) {
+            root.showArtifact(artifact);
+          }
+        }
+      }, 22);
+    }, options.isDemo ? 420 : 280);
   }
 
   // 12. Session State Persistence
@@ -1793,6 +1884,9 @@ ${!Store.getApiKey() ? `> [!TIP]
 
     Store.setActiveSessionId(activeSession.id);
     document.getElementById("sessionTitle").textContent = activeSession.title;
+    if (window.innerWidth <= 900) {
+      document.getElementById("appSidebar")?.classList.add("collapsed");
+    }
     renderChatStream();
     renderSessionsList();
 
@@ -1800,8 +1894,11 @@ ${!Store.getApiKey() ? `> [!TIP]
       recordNavHistory(activeSession.id);
     }
 
-    if (activeSession.artifacts && activeSession.artifacts.length > 0) {
+    const artPane = document.getElementById("artifactsPane");
+    if (activeSession.artifacts && activeSession.artifacts.length > 0 && window.innerWidth >= 1200) {
       root.showArtifact(activeSession.artifacts[0]);
+    } else if (artPane) {
+      artPane.classList.add("hidden");
     }
   }
 
@@ -1826,12 +1923,24 @@ ${!Store.getApiKey() ? `> [!TIP]
         <p style="font-size: 13.5px; color: #94a3b8; line-height: 1.5; margin-bottom: 20px;">
           Autonomous agentic workspace with 24 God Plugins, specialized subagents fleet, MCP connectors, and background automations.
         </p>
-        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-          <button class="demo-start-hero-btn" onclick="window.launchInteractiveDemo && window.launchInteractiveDemo()" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border: none; padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(99,102,241,0.35);">
-            ⚡ Try Demo Mode (Instant Simulation)
+        <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+          <button class="demo-start-hero-btn" data-demo-cmd="/plan Architect autonomous AI agent with 24 MCP plugins, subagents fleet, and background automations" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border: none; padding: 8px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(99,102,241,0.35);">
+            ⚡ Demo: Architect Plan
+          </button>
+          <button class="demo-start-hero-btn" data-demo-cmd="/quiz" style="background: rgba(6, 182, 212, 0.14); color: #a5f3fc; border: 1px solid rgba(6, 182, 212, 0.35); padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; cursor: pointer;">
+            🧪 Demo: JEE Physics
+          </button>
+          <button class="demo-start-hero-btn" data-demo-cmd="/python" style="background: rgba(16, 185, 129, 0.14); color: #a7f3d0; border: 1px solid rgba(16, 185, 129, 0.35); padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; cursor: pointer;">
+            🐍 Demo: Python Code
           </button>
         </div>
       `;
+      welcomeCard.querySelectorAll(".demo-start-hero-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const cmd = btn.getAttribute("data-demo-cmd");
+          if (root.launchInteractiveDemo) root.launchInteractiveDemo(cmd);
+        });
+      });
       stream.appendChild(welcomeCard);
       return;
     }

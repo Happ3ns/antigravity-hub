@@ -534,7 +534,23 @@
     },
 
     getModel: function () {
-      return localStorage.getItem(STORAGE_KEYS.MODEL) || "gemini-3.8-flash";
+      const saved = localStorage.getItem(STORAGE_KEYS.MODEL);
+      if (!saved) return "gemini-3.8-flash";
+      // Auto-migrate retired/deprecated model IDs to active Gemini 3.8 / 4 models
+      if (
+        saved === "gemini-2.5-flash" ||
+        saved === "gemini-2.0-flash" ||
+        saved === "gemini-2.0-flash-thinking-exp" ||
+        saved.startsWith("gemini-1.5")
+      ) {
+        localStorage.setItem(STORAGE_KEYS.MODEL, "gemini-3.8-flash");
+        return "gemini-3.8-flash";
+      }
+      if (saved === "gemini-2.5-pro") {
+        localStorage.setItem(STORAGE_KEYS.MODEL, "gemini-4-argon");
+        return "gemini-4-argon";
+      }
+      return saved;
     },
 
     setModel: function (m) {

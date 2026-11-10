@@ -52,7 +52,68 @@
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  function buildAssistantMessageElement(msgData, modelName = "Gemini 2.5 Flash") {
+  function createToolCallCard(tc, icons) {
+    const toolCard = document.createElement("div");
+    toolCard.className = "tool-call-card";
+    const toolName = tc.name || tc.function?.name || "tool";
+    const toolArgs = tc.args || tc.function?.arguments || "{}";
+
+    let toolIcon = icons.get("terminal");
+    if (toolName.includes("search")) toolIcon = icons.get("search");
+    else if (toolName.includes("file") || toolName.includes("write") || toolName.includes("edit")) toolIcon = icons.get("file");
+    else if (toolName.includes("github")) toolIcon = icons.get("github");
+
+    toolCard.innerHTML = `
+      <div class="tool-call-header">
+        <span class="tool-badge-pill">${toolIcon} ${escapeHtml(toolName)}</span>
+        <span class="tool-status-pill">
+          ${icons.get("check")} Executed
+        </span>
+      </div>
+      <div class="tool-call-body">${escapeHtml(typeof toolArgs === "string" ? toolArgs : JSON.stringify(toolArgs, null, 2))}</div>
+    `;
+    return toolCard;
+  }
+
+  function createArtifactCard(artifact, icons) {
+    const artName = artifact?.name || "jee-analysis.md";
+    const artSub = artifact?.subtitle || (artName === "jee-analysis.md" ? "JEE Exam Analysis & Math Artifact" : "Interactive Markdown Artifact");
+    const artCard = document.createElement("div");
+    artCard.className = "chat-artifact-card";
+    artCard.innerHTML = `
+      <div class="artifact-card-left">
+        <div class="artifact-card-icon">${icons.get("file")}</div>
+        <div>
+          <div class="artifact-card-title">${escapeHtml(artName)}</div>
+          <div class="artifact-card-sub">${escapeHtml(artSub)}</div>
+        </div>
+      </div>
+      <div class="artifact-card-action">Open in Studio →</div>
+    `;
+    artCard.addEventListener("click", () => {
+      if (root.showArtifact) root.showArtifact(artifact || { name: "jee-analysis.md" });
+    });
+    return artCard;
+  }
+
+  function attachCopyButtons(bodyDiv, icons) {
+    bodyDiv.querySelectorAll("pre").forEach(pre => {
+      if (pre.querySelector(".copy-code-btn")) return;
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "copy-code-btn";
+      copyBtn.innerHTML = `${icons.get("copy")} Copy`;
+      copyBtn.addEventListener("click", () => {
+        const code = pre.querySelector("code")?.innerText || pre.innerText;
+        navigator.clipboard?.writeText(code).then(() => {
+          copyBtn.innerHTML = `${icons.get("check")} Copied!`;
+          setTimeout(() => { copyBtn.innerHTML = `${icons.get("copy")} Copy`; }, 2000);
+        });
+      });
+      pre.appendChild(copyBtn);
+    });
+  }
+
+  function buildAssistantMessageElement(msgData, modelName = "Gemini 3.8 Flash") {
     const icons = root.Icons || { get: () => "" };
     const el = document.createElement("div");
     el.className = "chat-msg assistant";
@@ -72,7 +133,7 @@
         </svg>
       </div>
       <span class="assistant-title">Antigravity</span>
-      <span class="assistant-model-tag">${msgData.model || modelName}</span>
+      <span class="assistant-model-tag">${escapeHtml(msgData.model || modelName)}</span>
     `;
     el.appendChild(header);
 
@@ -97,47 +158,13 @@
     // 3. Tool Calls (if any)
     if (msgData.tool_calls && Array.isArray(msgData.tool_calls) && msgData.tool_calls.length > 0) {
       msgData.tool_calls.forEach(tc => {
-        const toolCard = document.createElement("div");
-        toolCard.className = "tool-call-card";
-        const toolName = tc.name || tc.function?.name || "tool";
-        const toolArgs = tc.args || tc.function?.arguments || "{}";
-        
-        let toolIcon = icons.get("terminal");
-        if (toolName.includes("search")) toolIcon = icons.get("search");
-        else if (toolName.includes("file") || toolName.includes("write") || toolName.includes("edit")) toolIcon = icons.get("file");
-        else if (toolName.includes("github")) toolIcon = icons.get("github");
-
-        toolCard.innerHTML = `
-          <div class="tool-call-header">
-            <span class="tool-badge-pill">${toolIcon} ${toolName}</span>
-            <span class="tool-status-pill">
-              ${icons.get("check")} Executed
-            </span>
-          </div>
-          <div class="tool-call-body">${typeof toolArgs === "string" ? toolArgs : JSON.stringify(toolArgs, null, 2)}</div>
-        `;
-        el.appendChild(toolCard);
+        el.appendChild(createToolCallCard(tc, icons));
       });
     }
 
     // 4. Artifact Reference Card (if artifact is detected)
     if (msgData.artifact || (body && body.includes("jee-analysis.md"))) {
-      const artCard = document.createElement("div");
-      artCard.className = "chat-artifact-card";
-      artCard.innerHTML = `
-        <div class="artifact-card-left">
-          <div class="artifact-card-icon">${icons.get("file")}</div>
-          <div>
-            <div class="artifact-card-title">${msgData.artifact?.name || "jee-analysis.md"}</div>
-            <div class="artifact-card-sub">JEE Exam Analysis &amp; Math Artifact</div>
-          </div>
-        </div>
-        <div class="artifact-card-action">Open in Studio →</div>
-      `;
-      artCard.addEventListener("click", () => {
-        if (root.showArtifact) root.showArtifact(msgData.artifact || { name: "jee-analysis.md" });
-      });
-      el.appendChild(artCard);
+      el.appendChild(createArtifactCard(msgData.artifact, icons));
     }
 
     // 5. Main Markdown Response Body
@@ -145,22 +172,7 @@
       const bodyDiv = document.createElement("div");
       bodyDiv.className = "msg-body";
       bodyDiv.innerHTML = renderMarkdown(body);
-
-      // Attach copy buttons to code blocks
-      bodyDiv.querySelectorAll("pre").forEach(pre => {
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "copy-code-btn";
-        copyBtn.innerHTML = `${icons.get("copy")} Copy`;
-        copyBtn.addEventListener("click", () => {
-          const code = pre.querySelector("code")?.innerText || pre.innerText;
-          navigator.clipboard.writeText(code).then(() => {
-            copyBtn.innerHTML = `${icons.get("check")} Copied!`;
-            setTimeout(() => { copyBtn.innerHTML = `${icons.get("copy")} Copy`; }, 2000);
-          });
-        });
-        pre.appendChild(copyBtn);
-      });
-
+      attachCopyButtons(bodyDiv, icons);
       renderMath(bodyDiv);
       el.appendChild(bodyDiv);
     }
@@ -169,7 +181,7 @@
   }
 
   // Live Streaming Container Builder
-  function createStreamingElement(modelName = "Gemini 2.5 Flash") {
+  function createStreamingElement(modelName = "Gemini 3.8 Flash") {
     const icons = root.Icons || { get: () => "" };
     const el = document.createElement("div");
     el.className = "chat-msg assistant streaming";
@@ -185,7 +197,7 @@
         </svg>
       </div>
       <span class="assistant-title">Antigravity</span>
-      <span class="assistant-model-tag">${modelName}</span>
+      <span class="assistant-model-tag">${escapeHtml(modelName)}</span>
     `;
     el.appendChild(header);
 
@@ -198,13 +210,19 @@
         <div class="thinking-summary-left">
           <span class="thinking-pulse-dot"></span>
           <span class="thinking-status-label">Reasoning...</span>
-          <span class="thinking-time-chip" id="streamingTimer">0.0s</span>
+          <span class="thinking-time-chip streaming-timer">0.0s</span>
         </div>
         <span class="thinking-chevron">${icons.get("chevronRight")}</span>
       </summary>
       <div class="thinking-content" style="opacity:0.85;">Initializing thought process...</div>
     `;
     el.appendChild(thinkingBlock);
+
+    const toolsSlot = document.createElement("div");
+    el.appendChild(toolsSlot);
+
+    const artifactSlot = document.createElement("div");
+    el.appendChild(artifactSlot);
 
     // Body
     const bodyDiv = document.createElement("div");
@@ -215,7 +233,7 @@
     const startTime = Date.now();
     const timerInterval = setInterval(() => {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      const timerEl = el.querySelector("#streamingTimer");
+      const timerEl = el.querySelector(".streaming-timer");
       if (timerEl) timerEl.textContent = `${elapsed}s`;
     }, 100);
 
@@ -226,14 +244,24 @@
         const contentEl = thinkingBlock.querySelector(".thinking-content");
         if (contentEl) contentEl.textContent = text;
       },
+      setTools: function (toolCalls) {
+        toolsSlot.innerHTML = "";
+        if (Array.isArray(toolCalls)) {
+          toolCalls.forEach(tc => toolsSlot.appendChild(createToolCallCard(tc, icons)));
+        }
+      },
+      setArtifact: function (artifact) {
+        artifactSlot.innerHTML = "";
+        if (artifact) artifactSlot.appendChild(createArtifactCard(artifact, icons));
+      },
       finalizeThinking: function () {
         clearInterval(timerInterval);
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         const label = thinkingBlock.querySelector(".thinking-status-label");
-        const timerEl = thinkingBlock.querySelector("#streamingTimer");
+        const timerEl = thinkingBlock.querySelector(".streaming-timer");
         if (label) label.textContent = "Thought Process";
         if (timerEl) timerEl.textContent = `· Thought for ${elapsed}s`;
-        thinkingBlock.open = false; // collapse smoothly
+        thinkingBlock.open = false;
       },
       updateBody: function (markdownText) {
         bodyDiv.style.display = "block";
@@ -242,7 +270,9 @@
       },
       finish: function () {
         clearInterval(timerInterval);
+        el.classList.remove("streaming");
         thinkingBlock.open = false;
+        attachCopyButtons(bodyDiv, icons);
         renderMath(bodyDiv);
       }
     };
