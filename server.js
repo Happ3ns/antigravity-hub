@@ -32,6 +32,10 @@ const server = http.createServer((req, res) => {
 
   // Route API requests
   if (req.url.startsWith('/api/chat')) {
+    if (req.method === 'GET' || req.method === 'OPTIONS') {
+      chatHandler(req, res);
+      return;
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
@@ -52,10 +56,16 @@ const server = http.createServer((req, res) => {
   }
 
   // Static File Serving
-  let reqPath = req.url.split('?')[0];
+  let reqPath = '/';
+  try { reqPath = decodeURIComponent(req.url.split('?')[0]); } catch (e) { reqPath = '/'; }
   if (reqPath === '/' || reqPath === '') reqPath = '/index.html';
 
-  const filePath = path.join(PUBLIC_DIR, reqPath);
+  const publicRoot = path.resolve(PUBLIC_DIR);
+  const filePath = path.resolve(publicRoot, '.' + (reqPath.startsWith('/') ? reqPath : '/' + reqPath));
+  if (filePath !== publicRoot && !filePath.startsWith(publicRoot + path.sep)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    return res.end('Forbidden');
+  }
   const ext = path.extname(filePath).toLowerCase();
 
   fs.readFile(filePath, (err, content) => {

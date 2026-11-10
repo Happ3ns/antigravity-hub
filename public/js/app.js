@@ -24,6 +24,7 @@
     initChatControls();
     applyThemeCustomizations();
     loadSessions();
+    checkServerPreinstalledKey();
     startAutomationTicker();
   });
 
@@ -1220,13 +1221,45 @@
     return normalized;
   }
 
+  function resolveBackendChatUrl() {
+    const custom = Store.getBackendUrl ? Store.getBackendUrl() : "";
+    if (custom) return custom;
+    const configured = root.ANTIGRAVITY_CONFIG?.backendUrl || "";
+    if (configured) return configured.replace(/\/$/, "");
+    const host = window.location.hostname || "";
+    if (window.location.protocol.startsWith("http") && !host.endsWith("github.io")) {
+      return "/api/chat";
+    }
+    return "";
+  }
+
+  async function checkServerPreinstalledKey() {
+    const backendUrl = resolveBackendChatUrl();
+    if (!backendUrl) return false;
+    try {
+      const res = await fetch(backendUrl, { method: "GET" });
+      if (res.ok) {
+        const info = await res.json();
+        if (info && info.preinstalledKey) {
+          root.hasServerKey = true;
+          const badge = document.getElementById("syncStatusText");
+          if (badge) badge.textContent = "Pre-installed Cloud Key 🟢";
+          return true;
+        }
+      }
+    } catch (e) {}
+    root.hasServerKey = false;
+    return false;
+  }
+
   async function callAgentStream(prompt) {
     const stream = document.getElementById("chatStream");
     const apiKey = Store.getApiKey();
+    const backendUrl = resolveBackendChatUrl();
     const model = Store.getModel();
     const mode = Store.getMode();
 
-    if (!apiKey) {
+    if (!apiKey && !backendUrl) {
       handleLocalAgentResponse(prompt);
       return;
     }
@@ -1235,7 +1268,10 @@
     stream.appendChild(streamingEl.element);
     stream.scrollTop = stream.scrollHeight;
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+    const useBackendProxy = Boolean(backendUrl) && (!apiKey || root.hasServerKey);
+    const endpoint = useBackendProxy
+      ? backendUrl
+      : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
 
     const contents = buildSanitizedContents(activeSession.messages);
     if (contents.length === 0) {
@@ -1268,20 +1304,31 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
 Wrap internal reasoning briefly in <thinking>...</thinking> tags before the final answer.`;
 
     try {
+      const requestPayload = useBackendProxy
+        ? {
+            prompt,
+            model,
+            apiKey: apiKey || undefined,
+            history: (activeSession.messages || []).slice(-10),
+            systemInstruction,
+            stream: true
+          }
+        : {
+            contents: contents,
+            systemInstruction: { parts: [{ text: systemInstruction }] }
+          };
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: contents,
-          systemInstruction: { parts: [{ text: systemInstruction }] }
-        })
+        body: JSON.stringify(requestPayload)
       });
 
       if (!response.ok) {
         let errMessage = `HTTP ${response.status}`;
         try {
           const errJson = await response.json();
-          errMessage = errJson?.error?.message || errMessage;
+          errMessage = (typeof errJson?.error === "string" ? errJson.error : errJson?.error?.message) || errMessage;
         } catch (e) {
           errMessage = await response.text().catch(() => errMessage);
         }
@@ -1827,7 +1874,7 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
             sessions = synced;
             Store.saveSessions(sessions);
             const badge = document.getElementById("syncStatusText");
-            if (badge) badge.textContent = `Synced · ${synced.length} Sessions`;
+            if (badge && !root.hasServerKey) badge.textContent = `Synced · ${synced.length} Sessions`;
           }
         }
       } catch (e) {}
@@ -1980,13 +2027,15 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
     const saveBtn = document.getElementById("saveSettingsBtn");
 
     const apiKeyInput = document.getElementById("geminiApiKeyInput");
+    const backendInput = document.getElementById("backendUrlInput");
     const githubInput = document.getElementById("githubTokenInput");
     const pinInput = document.getElementById("changePinInput");
 
     openBtn?.addEventListener("click", () => {
-      apiKeyInput.value = Store.getApiKey();
-      githubInput.value = Store.getGithubToken();
-      pinInput.value = "";
+      if (apiKeyInput) apiKeyInput.value = Store.getApiKey();
+      if (backendInput) backendInput.value = Store.getBackendUrl();
+      if (githubInput) githubInput.value = Store.getGithubToken();
+      if (pinInput) pinInput.value = "";
       modal?.showModal();
     });
 
@@ -1994,14 +2043,16 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
     closeBtn?.addEventListener("click", closeModal);
     cancelBtn?.addEventListener("click", closeModal);
 
-    saveBtn?.addEventListener("click", () => {
-      Store.setApiKey(apiKeyInput.value);
-      Store.setGithubToken(githubInput.value);
-      if (pinInput.value && pinInput.value.length === 4) {
+    saveBtn?.addEventListener("click", async () => {
+      Store.setApiKey(apiKeyInput?.value || "");
+      Store.setBackendUrl(backendInput?.value || "");
+      Store.setGithubToken(githubInput?.value || "");
+      if (pinInput?.value && pinInput.value.length === 4) {
         Store.setNewPin(pinInput.value);
       }
       closeModal();
-      alert("Settings saved. 24/7 Cloud Agent is ready.");
+      await checkServerPreinstalledKey();
+      showToast("Settings saved!");
     });
   }
 

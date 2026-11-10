@@ -19,7 +19,8 @@
     CUSTOM_MCP: "ag_custom_mcp_servers",
     AUTOMATIONS: "ag_automations_list",
     KB_TRANSPARENCY: "ag_kb_transparency",
-    THEME_ACCENT: "ag_theme_accent"
+    THEME_ACCENT: "ag_theme_accent",
+    BACKEND_URL: "ag_backend_proxy_url"
   };
 
   const DEFAULT_PIN = "1234";
@@ -523,6 +524,14 @@
 
     setApiKey: function (key) {
       localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, (key || "").trim());
+    },
+
+    getBackendUrl: function () {
+      return localStorage.getItem(STORAGE_KEYS.BACKEND_URL) || "";
+    },
+
+    setBackendUrl: function (url) {
+      localStorage.setItem(STORAGE_KEYS.BACKEND_URL, (url || "").trim().replace(/\/$/, ""));
     },
 
     getGithubToken: function () {
