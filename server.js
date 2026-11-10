@@ -30,8 +30,9 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(data));
   };
 
-  // Route API requests
-  if (req.url.startsWith('/api/chat')) {
+  // Route API requests (strip accidental /public prefix from platform rewrites)
+  const routeUrl = (req.url || '/').replace(/^\/public(?=\/api\/)/, '');
+  if (routeUrl.startsWith('/api/chat')) {
     if (req.method === 'GET' || req.method === 'OPTIONS') {
       chatHandler(req, res);
       return;
@@ -59,7 +60,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.url.startsWith('/api/sync')) {
+  if (routeUrl.startsWith('/api/sync')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {

@@ -1389,12 +1389,12 @@
   function resolveBackendChatUrl() {
     const custom = Store.getBackendUrl ? Store.getBackendUrl() : "";
     if (custom) return custom;
-    const configured = root.ANTIGRAVITY_CONFIG?.backendUrl || "";
-    if (configured) return configured.replace(/\/$/, "");
     const host = window.location.hostname || "";
     if (window.location.protocol.startsWith("http") && !host.endsWith("github.io")) {
       return "/api/chat";
     }
+    const configured = root.ANTIGRAVITY_CONFIG?.backendUrl || "";
+    if (configured) return configured.replace(/\/$/, "");
     return "";
   }
 
