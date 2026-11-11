@@ -1,4 +1,5 @@
 // ── Vercel Serverless Function & Local Node Proxy: Multi-Turn Streaming Antigravity Agent ──
+const crypto = require("node:crypto");
 const { getToolDeclarations, executeToolCall } = require("./_tools.js");
 
 const MODEL_MIGRATION_MAP = {
@@ -14,6 +15,53 @@ const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.
 const RETRY_STATUSES = new Set([404, 429, 503]);
 const ALLOWED_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const overloadedModelUntil = new Map();
+
+// Sliding-window per-IP rate limiter (25 requests / 60s per warm instance)
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 25;
+const rateBuckets = new Map();
+
+function getClientIp(req) {
+  const xff = req.headers?.["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) {
+    return xff.split(",")[0].trim();
+  }
+  return req.headers?.["x-real-ip"] || req.socket?.remoteAddress || "unknown";
+}
+
+function checkRateLimit(req) {
+  const ip = getClientIp(req);
+  const now = Date.now();
+  if (rateBuckets.size > 1000) {
+    for (const [k, hits] of rateBuckets.entries()) {
+      const fresh = hits.filter((t) => now - t < RATE_WINDOW_MS);
+      if (fresh.length === 0) rateBuckets.delete(k);
+      else rateBuckets.set(k, fresh);
+    }
+  }
+  const recent = (rateBuckets.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    const oldest = recent[0] || now;
+    const retryAfterSec = Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - oldest)) / 1000));
+    rateBuckets.set(ip, recent);
+    return { allowed: false, retryAfterSec };
+  }
+  recent.push(now);
+  rateBuckets.set(ip, recent);
+  return { allowed: true, remaining: RATE_LIMIT_MAX - recent.length };
+}
+
+function verifyStudioPasscode(req) {
+  const required = (process.env.STUDIO_PASSCODE || "").trim();
+  if (!required) return true;
+  const supplied = String(
+    req.headers?.["x-studio-passcode"] || req.body?.passcode || ""
+  ).trim();
+  if (!supplied) return false;
+  const a = crypto.createHash("sha256").update(required).digest();
+  const b = crypto.createHash("sha256").update(supplied).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 function resolveActiveModel(requested) {
   const m = (requested || "gemini-3.8-flash").trim();
@@ -118,7 +166,7 @@ Be direct, conversational, helpful, and crisp. Format responses with GitHub mark
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Studio-Passcode");
 }
 
 function sendSse(res, obj) {
@@ -134,7 +182,7 @@ function extractCompactPreview(output) {
   }
 }
 
-async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, shouldStream }) {
+async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, shouldStream, externalSignal }) {
   const payload = JSON.stringify(bodyObj);
   const now = Date.now();
   const readyModels = candidateModels.filter((m) => (overloadedModelUntil.get(m) || 0) <= now);
@@ -144,12 +192,19 @@ async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, sh
   let usedModel = orderedModels[0];
 
   for (let i = 0; i < orderedModels.length; i++) {
+    if (externalSignal?.aborted) {
+      const abortErr = new Error("Request cancelled by client");
+      abortErr.name = "AbortError";
+      throw abortErr;
+    }
     usedModel = orderedModels[i];
     const hasMore = i < orderedModels.length - 1;
     const action = shouldStream ? "streamGenerateContent?alt=sse&" : "generateContent?";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(usedModel)}:${action}key=${encodeURIComponent(activeKey)}`;
 
     const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    externalSignal?.addEventListener?.("abort", onExternalAbort, { once: true });
     const timer = setTimeout(() => controller.abort(), hasMore ? 6500 : 24000);
     try {
       lastRes = await fetch(endpoint, {
@@ -159,11 +214,13 @@ async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, sh
         signal: controller.signal,
       });
     } catch (err) {
+      if (externalSignal?.aborted) throw err;
       overloadedModelUntil.set(usedModel, Date.now() + 90_000);
       if (!hasMore) throw err;
       continue;
     } finally {
       clearTimeout(timer);
+      externalSignal?.removeEventListener?.("abort", onExternalAbort);
     }
 
     if (lastRes.ok) {
@@ -252,6 +309,7 @@ module.exports = async function handler(req, res) {
       JSON.stringify({
         ok: true,
         preinstalledKey: Boolean(process.env.GEMINI_API_KEY),
+        passcodeRequired: Boolean((process.env.STUDIO_PASSCODE || "").trim()),
         defaultModel: "gemini-3.8-flash",
         agenticTools: true,
       })
@@ -262,6 +320,28 @@ module.exports = async function handler(req, res) {
     res.statusCode = 405;
     res.setHeader("Content-Type", "application/json");
     return res.end(JSON.stringify({ error: "Method Not Allowed" }));
+  }
+
+  if (!verifyStudioPasscode(req)) {
+    res.statusCode = 401;
+    res.setHeader("Content-Type", "application/json");
+    return res.end(
+      JSON.stringify({
+        error: "Invalid or missing Studio Passcode. Configure it in Settings -> Studio Passcode.",
+      })
+    );
+  }
+
+  const rate = checkRateLimit(req);
+  if (!rate.allowed) {
+    res.statusCode = 429;
+    res.setHeader("Retry-After", String(rate.retryAfterSec));
+    res.setHeader("Content-Type", "application/json");
+    return res.end(
+      JSON.stringify({
+        error: `Rate limit exceeded. Please wait ${rate.retryAfterSec}s before sending another request.`,
+      })
+    );
   }
 
   const {
@@ -321,6 +401,13 @@ module.exports = async function handler(req, res) {
   let stickyModel = null;
   let sseHeadersSent = false;
 
+  const clientAbort = new AbortController();
+  if (typeof res.on === "function") {
+    res.on("close", () => {
+      if (!res.writableEnded) clientAbort.abort();
+    });
+  }
+
   const ensureSseHeaders = (activeModel) => {
     if (!sseHeadersSent) {
       res.writeHead(200, {
@@ -339,6 +426,7 @@ module.exports = async function handler(req, res) {
     let finalModelUsed = targetModel;
 
     for (let step = 0; step < maxSteps; step++) {
+      if (clientAbort.signal.aborted) break;
       const stepModels = stickyModel
         ? [...new Set([stickyModel, ...candidateModels])]
         : candidateModels;
@@ -355,6 +443,7 @@ module.exports = async function handler(req, res) {
         bodyObj,
         activeKey,
         shouldStream,
+        externalSignal: clientAbort.signal,
       });
       finalModelUsed = activeModel;
 
@@ -476,6 +565,9 @@ module.exports = async function handler(req, res) {
       })
     );
   } catch (error) {
+    if (clientAbort.signal.aborted) {
+      return res.end();
+    }
     console.error("Proxy Gemini error:", error);
     if (!res.headersSent) {
       res.statusCode = 500;

@@ -27,10 +27,10 @@
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 
   <!-- Modern 2026 Stylesheets -->
-  <link rel="stylesheet" href="css/theme.css?v=2026.9">
-  <link rel="stylesheet" href="css/layout.css?v=2026.9">
-  <link rel="stylesheet" href="css/chat.css?v=2026.9">
-  <link rel="stylesheet" href="css/artifacts.css?v=2026.9">
+  <link rel="stylesheet" href="css/theme.css?v=2026.10">
+  <link rel="stylesheet" href="css/layout.css?v=2026.10">
+  <link rel="stylesheet" href="css/chat.css?v=2026.10">
+  <link rel="stylesheet" href="css/artifacts.css?v=2026.10">
 </head>
 <body>
 
@@ -325,6 +325,9 @@
           <button class="art-tab" data-tab="files">Repo Tree</button>
         </div>
         <div class="artifacts-actions">
+          <button class="icon-btn-ghost" id="downloadArtifactBtn" title="Download Active Artifact">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
           <button class="icon-btn-ghost" id="expandArtifactsBtn" title="Fullscreen">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
           </button>
@@ -677,7 +680,16 @@
         <div class="config-field">
           <label>GitHub Personal Access Token (Optional)</label>
           <input type="password" id="githubTokenInput" placeholder="ghp_...">
-          <span class="field-hint">Enables reading and committing code to Happ3ns repositories.</span>
+          <span class="field-hint">Enables reading/committing code to Happ3ns repositories &amp; optional Gist sync.</span>
+        </div>
+        <div class="config-field">
+          <label>Sync Gist ID (Optional)</label>
+          <input type="text" id="syncGistIdInput" placeholder="gist id for cross-device backup">
+          <span class="field-hint">When paired with your GitHub token, syncs chats across devices via /api/sync.</span>
+        </div>
+        <div class="config-field">
+          <label>Studio Access Passcode (Optional)</label>
+          <input type="password" id="studioPasscodeInput" placeholder="Only required if STUDIO_PASSCODE is set on Vercel">
         </div>
         <div class="config-field">
           <label>Change Security PIN (Default: 1234)</label>
@@ -693,10 +705,10 @@
   </dialog>
 
   <!-- Application Scripts -->
-  <script src="js/config.js?v=2026.9"></script>
-  <script src="js/icons.js?v=2026.9"></script>
-  <script src="js/store.js?v=2026.9"></script>
-  <script src="js/render.js?v=2026.9"></script>
-  <script src="js/app.js?v=2026.9"></script>
+  <script src="js/config.js?v=2026.10"></script>
+  <script src="js/icons.js?v=2026.10"></script>
+  <script src="js/store.js?v=2026.10"></script>
+  <script src="js/render.js?v=2026.10"></script>
+  <script src="js/app.js?v=2026.10"></script>
 </body>
 </html>

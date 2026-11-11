@@ -20,7 +20,9 @@
     AUTOMATIONS: "ag_automations_list",
     KB_TRANSPARENCY: "ag_kb_transparency",
     THEME_ACCENT: "ag_theme_accent",
-    BACKEND_URL: "ag_backend_proxy_url"
+    BACKEND_URL: "ag_backend_proxy_url",
+    STUDIO_PASSCODE: "ag_studio_passcode",
+    SYNC_GIST_ID: "ag_sync_gist_id"
   };
 
   const DEFAULT_PIN = "1234";
@@ -532,6 +534,22 @@
 
     setBackendUrl: function (url) {
       localStorage.setItem(STORAGE_KEYS.BACKEND_URL, (url || "").trim().replace(/\/$/, ""));
+    },
+
+    getStudioPasscode: function () {
+      return localStorage.getItem(STORAGE_KEYS.STUDIO_PASSCODE) || "";
+    },
+
+    setStudioPasscode: function (val) {
+      localStorage.setItem(STORAGE_KEYS.STUDIO_PASSCODE, (val || "").trim());
+    },
+
+    getSyncGistId: function () {
+      return localStorage.getItem(STORAGE_KEYS.SYNC_GIST_ID) || "";
+    },
+
+    setSyncGistId: function (val) {
+      localStorage.setItem(STORAGE_KEYS.SYNC_GIST_ID, (val || "").trim());
     },
 
     getGithubToken: function () {

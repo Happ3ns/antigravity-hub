@@ -9,7 +9,10 @@ function redactSecrets(str) {
   if (typeof str !== 'string') return str;
   return str
     .replace(/(ghp_[A-Za-z0-9_]{15,}|github_pat_[A-Za-z0-9_]{15,})/g, '[REDACTED_GITHUB_TOKEN]')
-    .replace(/(AIzaSy[A-Za-z0-9_-]{25,})/g, '[REDACTED_GEMINI_KEY]');
+    .replace(/(AIzaSy[A-Za-z0-9_-]{25,})/g, '[REDACTED_GEMINI_KEY]')
+    .replace(/(AQ\.[A-Za-z0-9._-]{20,})/g, '[REDACTED_GOOGLE_TOKEN]')
+    .replace(/\b(sk-[A-Za-z0-9_-]{16,})\b/g, '[REDACTED_API_KEY]')
+    .replace(/\b(Bearer\s+[A-Za-z0-9._-]{20,})\b/gi, 'Bearer [REDACTED_TOKEN]');
 }
 
 function runSync() {

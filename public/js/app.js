@@ -13,6 +13,9 @@
   let currentRepoName = "Happ3ns/antigravity-hub";
   let selectedRepoState = { repo: "Happ3ns/antigravity-hub", path: "", content: "" };
   let reposCatalogLoaded = false;
+  let activeStreamAbort = null;
+  let currentActiveArtifact = null;
+  let pyodideLoaderPromise = null;
 
   document.addEventListener("DOMContentLoaded", () => {
     initAmbientBackground();
@@ -902,26 +905,78 @@
       renderSessionsList(q);
     });
 
-    // Topbar Sync Now button
+    // Topbar Sync Now button (Non-destructive merge from /api/sync + Gist + synced-sessions.json)
     document.getElementById("syncNowBtn")?.addEventListener("click", async () => {
       const badge = document.getElementById("syncStatusText");
-      if (badge) badge.textContent = "Syncing PC...";
+      const prevBadge = badge ? badge.textContent : "Cloud Ready";
+      if (badge) badge.textContent = "Syncing...";
+
+      const existing = Store.getSessions();
+      const mergedMap = new Map(existing.map(s => [s.id, s]));
+      let pulledCount = 0;
+
+      const mergeIntoMap = (arr) => {
+        if (!Array.isArray(arr)) return;
+        arr.forEach(s => {
+          if (!s || !s.id) return;
+          const prev = mergedMap.get(s.id);
+          if (!prev || (s.messages?.length || 0) >= (prev.messages?.length || 0)) {
+            mergedMap.set(s.id, s);
+            pulledCount++;
+          }
+        });
+      };
+
       try {
         const res = await fetch("data/synced-sessions.json?t=" + Date.now());
-        if (res.ok) {
-          const synced = await res.json();
-          if (Array.isArray(synced) && synced.length > 0) {
-            Store.saveSessions(synced);
-            switchSession(synced[0].id);
-            if (badge) badge.textContent = `Synced · ${synced.length} Sessions`;
-            alert(`Successfully refreshed ${synced.length} sessions from PC!`);
-            return;
+        if (res.ok) mergeIntoMap(await res.json());
+      } catch (e) {}
+
+      const chatUrl = resolveBackendChatUrl();
+      const syncUrl = chatUrl ? chatUrl.replace(/\/chat$/, "/sync") : "";
+      if (syncUrl) {
+        try {
+          const gistId = Store.getSyncGistId ? Store.getSyncGistId() : "";
+          const passcode = Store.getStudioPasscode ? Store.getStudioPasscode() : "";
+          const headers = {
+            "Content-Type": "application/json",
+            ...(passcode ? { "X-Studio-Passcode": passcode } : {})
+          };
+          const q = gistId ? `?gistId=${encodeURIComponent(gistId)}` : "";
+          const gRes = await fetch(syncUrl + q, { headers });
+          if (gRes.ok) {
+            const gJson = await gRes.json();
+            mergeIntoMap(gJson.sessions);
           }
+          const mergedArr = Array.from(mergedMap.values()).slice(0, 50);
+          Store.saveSessions(mergedArr);
+          await fetch(syncUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              sessions: mergedArr,
+              gistId: gistId || undefined,
+              githubToken: Store.getGithubToken() || undefined
+            })
+          });
+        } catch (e) {
+          console.warn("Cloud sync error:", e);
         }
-      } catch (e) {
-        console.warn(e);
       }
-      if (badge) badge.textContent = "Cloud Ready";
+
+      const finalSessions = Array.from(mergedMap.values()).slice(0, 50);
+      if (finalSessions.length > 0) {
+        Store.saveSessions(finalSessions);
+        renderSessionsList();
+        if (!activeSession && finalSessions[0]) switchSession(finalSessions[0].id);
+        showToast(`Synced ${finalSessions.length} session${finalSessions.length === 1 ? "" : "s"}!`);
+      } else {
+        showToast("No remote sessions to sync yet.");
+      }
+
+      if (badge) {
+        badge.textContent = root.hasServerKey ? "Pre-installed Cloud Key 🟢" : (pulledCount > 0 ? `Synced · ${finalSessions.length}` : prevBadge);
+      }
     });
 
     // Topbar Hard Reload (Cache Busting)
@@ -1011,6 +1066,7 @@
     const toggleBtn = document.getElementById("toggleArtifactsBtn");
     const closeBtn = document.getElementById("closeArtifactsBtn");
     const expandBtn = document.getElementById("expandArtifactsBtn");
+    const downloadBtn = document.getElementById("downloadArtifactBtn");
     const tabs = document.querySelectorAll(".artifacts-tabs .art-tab");
 
     toggleBtn?.addEventListener("click", () => {
@@ -1023,6 +1079,25 @@
 
     expandBtn?.addEventListener("click", () => {
       pane.classList.toggle("fullscreen");
+    });
+
+    downloadBtn?.addEventListener("click", () => {
+      if (!currentActiveArtifact || !currentActiveArtifact.content) {
+        showToast("Open an artifact document first to download it.");
+        return;
+      }
+      const filename = currentActiveArtifact.name || "artifact.md";
+      const mime = /\.html?$/i.test(filename) ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8";
+      const blob = new Blob([currentActiveArtifact.content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast(`Downloaded ${filename}`);
     });
 
     tabs.forEach(tab => {
@@ -1054,6 +1129,7 @@
 
     const name = typeof artifact === "object" ? (artifact.name || "artifact.md") : "artifact.md";
     const content = typeof artifact === "object" ? (artifact.content || "") : String(artifact || "");
+    currentActiveArtifact = { name, content };
     const isHtml = /\.html?$/i.test(name);
 
     const previewFrame = document.getElementById("previewFrame");
@@ -1323,7 +1399,130 @@
     return userMsg;
   }
 
+  const SEND_ICON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+  const STOP_ICON_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+
+  function setSendButtonStreaming(streaming) {
+    const btn = document.getElementById("sendBtn");
+    if (!btn) return;
+    btn.classList.toggle("is-streaming", Boolean(streaming));
+    btn.setAttribute("aria-label", streaming ? "Stop generating" : "Send message");
+    btn.setAttribute("title", streaming ? "Stop generating" : "Send message");
+    btn.innerHTML = streaming ? STOP_ICON_SVG : SEND_ICON_SVG;
+  }
+
+  async function loadPyodideRuntime() {
+    if (root.__agPyodide) return root.__agPyodide;
+    if (!pyodideLoaderPromise) {
+      pyodideLoaderPromise = (async () => {
+        if (typeof root.loadPyodide !== "function") {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
+            s.onload = resolve;
+            s.onerror = () => reject(new Error("Failed to load Pyodide WebAssembly runtime."));
+            document.head.appendChild(s);
+          });
+        }
+        const py = await root.loadPyodide({
+          indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/",
+        });
+        root.__agPyodide = py;
+        return py;
+      })();
+    }
+    return pyodideLoaderPromise;
+  }
+
+  async function runPyodideSnippet(code) {
+    const stream = document.getElementById("chatStream");
+    const streamingEl = Render.createStreamingElement("Pyodide WASM 3.12");
+    streamingEl.hideThinkingIfUnused();
+    stream.appendChild(streamingEl.element);
+
+    const runningTool = [{ name: "python_pyodide", args: { code }, status: "running" }];
+    streamingEl.setTools(runningTool);
+    streamingEl.updateBody("_Loading Python WebAssembly runtime & executing..._");
+    stream.scrollTop = stream.scrollHeight;
+
+    try {
+      const py = await loadPyodideRuntime();
+      py.globals.set("__ag_code", code);
+      const outputJson = await py.runPythonAsync(`
+import sys, io, json, traceback
+_buf = io.StringIO()
+_err = io.StringIO()
+_old_out, _old_err = sys.stdout, sys.stderr
+sys.stdout, sys.stderr = _buf, _err
+_val = None
+try:
+    import ast
+    _tree = ast.parse(__ag_code, mode="exec")
+    if _tree.body and isinstance(_tree.body[-1], ast.Expr):
+        _last = _tree.body.pop()
+        if _tree.body:
+            exec(compile(_tree, "<pyodide>", "exec"), globals())
+        _val = eval(compile(ast.Expression(_last.value), "<pyodide>", "eval"), globals())
+    else:
+        exec(compile(_tree, "<pyodide>", "exec"), globals())
+except Exception:
+    traceback.print_exc(file=_err)
+finally:
+    sys.stdout, sys.stderr = _old_out, _old_err
+json.dumps({"stdout": _buf.getvalue(), "stderr": _err.getvalue(), "result": None if _val is None else repr(_val)})
+`);
+      const res = JSON.parse(outputJson);
+      const isErr = Boolean(res.stderr && res.stderr.trim());
+      const toolDone = [{
+        name: "python_pyodide",
+        args: { code },
+        status: isErr ? "error" : "done",
+        resultPreview: (res.stdout || res.result || res.stderr || "Executed").slice(0, 500),
+      }];
+      streamingEl.setTools(toolDone);
+
+      const parts = ["### 🐍 Browser Python Execution (`Pyodide`)"];
+      if (res.stdout) parts.push(`**Stdout:**\n\`\`\`text\n${res.stdout.trimEnd()}\n\`\`\``);
+      if (res.result !== null && res.result !== undefined) parts.push(`**Return Value:** \`${res.result}\``);
+      if (isErr) parts.push(`**Stderr:**\n\`\`\`text\n${res.stderr.trimEnd()}\n\`\`\``);
+      if (!res.stdout && res.result === null && !isErr) parts.push("_Executed cleanly with no output._");
+
+      const finalMd = parts.join("\n\n");
+      streamingEl.updateBody(finalMd);
+      streamingEl.finish();
+
+      activeSession.messages.push({
+        role: "assistant",
+        content: finalMd,
+        model: "Pyodide WASM",
+        tool_calls: toolDone,
+        created_at: new Date().toISOString(),
+      });
+      saveActiveSession();
+    } catch (err) {
+      const toolFail = [{ name: "python_pyodide", args: { code }, status: "error", resultPreview: err.message }];
+      streamingEl.setTools(toolFail);
+      const msg = `⚠️ **Python Execution Failed:** ${err.message}`;
+      streamingEl.updateBody(msg);
+      streamingEl.finish();
+      activeSession.messages.push({
+        role: "assistant",
+        content: msg,
+        model: "Pyodide WASM",
+        tool_calls: toolFail,
+        created_at: new Date().toISOString(),
+      });
+      saveActiveSession();
+    }
+    stream.scrollTop = stream.scrollHeight;
+  }
+
   function sendMessage() {
+    if (activeStreamAbort) {
+      activeStreamAbort.abort();
+      return;
+    }
+
     const input = document.getElementById("promptInput");
     const rawText = input.value.trim();
     if (!rawText && pendingAttachments.length === 0) return;
@@ -1361,6 +1560,12 @@
       created_at: new Date().toISOString()
     });
     saveActiveSession();
+
+    if (/^\/python\s+\S/i.test(rawText)) {
+      const pyCode = rawText.replace(/^\/python\s+/i, "").trim();
+      runPyodideSnippet(pyCode);
+      return;
+    }
 
     callAgentStream(displayPrompt, { rawPrompt: rawText, attachments: sentAttachments });
   }
@@ -1547,9 +1752,24 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
             systemInstruction: { parts: [{ text: systemInstruction }] }
           };
 
+      const studioPasscode = Store.getStudioPasscode ? Store.getStudioPasscode() : "";
+      activeStreamAbort = new AbortController();
+      setSendButtonStreaming(true);
+
+      let partialFullText = "";
+      let partialThinking = "";
+      let partialBody = "";
+      let partialUsedModel = model;
+      let partialTools = [];
+      let partialArtifacts = [];
+
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(useBackendProxy && studioPasscode ? { "X-Studio-Passcode": studioPasscode } : {})
+        },
+        signal: activeStreamAbort.signal,
         body: JSON.stringify(requestPayload)
       });
 
@@ -1576,6 +1796,9 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
 
       const toolCallsList = [];
       const artifactsList = [];
+      partialTools = toolCallsList;
+      partialArtifacts = artifactsList;
+      partialUsedModel = usedModelLabel;
 
       const handleSseLine = (line) => {
         if (!line.startsWith("data: ")) return;
@@ -1592,6 +1815,7 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
         if (data.ag_event) {
           if (data.ag_event === "meta" && data.model) {
             usedModelLabel = data.model;
+            partialUsedModel = usedModelLabel;
             streamingEl.setModelLabel(usedModelLabel);
           } else if (data.ag_event === "tool_start" && data.tool) {
             toolCallsList.push({ ...data.tool, status: "running" });
@@ -1629,11 +1853,13 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
 
           if (part.thought) {
             thinkingBuffer += part.text;
+            partialThinking = thinkingBuffer;
             streamingEl.updateThinking(thinkingBuffer);
             continue;
           }
 
           fullText += part.text;
+          partialFullText = fullText;
 
           if (fullText.includes("<thinking>")) {
             const splitOpen = fullText.split("<thinking>");
@@ -1642,6 +1868,8 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
               const subParts = afterOpen.split("</thinking>");
               thinkingBuffer = (splitOpen[0] ? "" : thinkingBuffer) || subParts[0].trim();
               bodyBuffer = (splitOpen[0] || "") + subParts.slice(1).join("</thinking>");
+              partialThinking = thinkingBuffer;
+              partialBody = bodyBuffer;
               streamingEl.updateThinking(thinkingBuffer);
               if (!thinkingFinalized) {
                 streamingEl.finalizeThinking();
@@ -1649,10 +1877,12 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
               }
               streamingEl.updateBody(bodyBuffer);
             } else {
+              partialThinking = afterOpen;
               streamingEl.updateThinking(afterOpen);
             }
           } else {
             bodyBuffer = fullText;
+            partialBody = bodyBuffer;
             if (!thinkingFinalized) {
               streamingEl.finalizeThinking();
               thinkingFinalized = true;
@@ -1693,9 +1923,29 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
       saveActiveSession();
 
     } catch (err) {
-      console.warn("Stream failed, falling back to local agent:", err);
-      streamingEl.element.remove();
-      handleLocalAgentResponse(prompt, err.message);
+      if (err?.name === "AbortError") {
+        streamingEl.finish();
+        const savedText = (partialBody || partialFullText || "_Generation stopped._").trim();
+        streamingEl.updateBody(savedText);
+        activeSession.messages.push({
+          role: "assistant",
+          content: savedText,
+          thinking: partialThinking,
+          model: partialUsedModel,
+          tool_calls: partialTools.map(t => t.status === "running" ? { ...t, status: "error", resultPreview: "Cancelled by user" } : t),
+          artifacts: partialArtifacts,
+          created_at: new Date().toISOString()
+        });
+        saveActiveSession();
+        showToast("Generation stopped.");
+      } else {
+        console.warn("Stream failed, falling back to local agent:", err);
+        streamingEl.element.remove();
+        handleLocalAgentResponse(prompt, err.message);
+      }
+    } finally {
+      activeStreamAbort = null;
+      setSendButtonStreaming(false);
     }
   }
 
@@ -2308,12 +2558,16 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
     const apiKeyInput = document.getElementById("geminiApiKeyInput");
     const backendInput = document.getElementById("backendUrlInput");
     const githubInput = document.getElementById("githubTokenInput");
+    const syncGistInput = document.getElementById("syncGistIdInput");
+    const studioPassInput = document.getElementById("studioPasscodeInput");
     const pinInput = document.getElementById("changePinInput");
 
     openBtn?.addEventListener("click", () => {
       if (apiKeyInput) apiKeyInput.value = Store.getApiKey();
       if (backendInput) backendInput.value = Store.getBackendUrl();
       if (githubInput) githubInput.value = Store.getGithubToken();
+      if (syncGistInput && Store.getSyncGistId) syncGistInput.value = Store.getSyncGistId();
+      if (studioPassInput && Store.getStudioPasscode) studioPassInput.value = Store.getStudioPasscode();
       if (pinInput) pinInput.value = "";
       modal?.showModal();
     });
@@ -2326,6 +2580,8 @@ ${subagents.map(a => `| **${a.icon} ${a.name}** | \`${a.role}\` | \`${a.model.to
       Store.setApiKey(apiKeyInput?.value || "");
       Store.setBackendUrl(backendInput?.value || "");
       Store.setGithubToken(githubInput?.value || "");
+      if (syncGistInput && Store.setSyncGistId) Store.setSyncGistId(syncGistInput.value || "");
+      if (studioPassInput && Store.setStudioPasscode) Store.setStudioPasscode(studioPassInput.value || "");
       if (pinInput?.value && pinInput.value.length === 4) {
         Store.setNewPin(pinInput.value);
       }

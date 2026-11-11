@@ -549,6 +549,11 @@
   transform: none;
 }
 
+.send-btn.is-streaming {
+  background: linear-gradient(135deg, #f43f5e, #fb923c);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.5);
+}
+
 /* ── Tool Execution Preview & Error States ── */
 .tool-status-pill.error {
   color: var(--accent-coral);
