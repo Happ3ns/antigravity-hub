@@ -1021,7 +1021,7 @@
     applyCustomBtn?.addEventListener("click", () => {
       const customId = (customInput?.value || "").trim();
       if (!customId) {
-        alert("Please enter a model ID (e.g. gemini-3.8-flash).");
+        alert("Please enter a model ID (e.g. gemini-2.0-flash).");
         return;
       }
       Store.setModel(customId);
@@ -1051,9 +1051,9 @@
     const textEl = document.getElementById("activeModelPillText");
     const currentModel = Store.getModel();
     const map = {
-      "gemini-3.8-flash": "✨ Gemini 3.8 Flash",
-      "gemini-4-argon": "🧠 Gemini 4 Argon",
-      "gemini-3.5-flash-lite": "🚀 Gemini 3.5 Flash-Lite"
+      "gemini-2.0-flash": "✨ Gemini 2.0 Flash",
+      "gemini-1.5-pro": "🧠 Gemini 1.5 Pro",
+      "gemini-1.5-flash": "🚀 Gemini 1.5 Flash",
     };
     if (textEl) {
       textEl.textContent = map[currentModel] || `✨ ${currentModel}`;
@@ -1983,7 +1983,7 @@ Format responses with GitHub markdown, KaTeX math notation ($$...$$ display, $..
           "",
           `Right now you're talking to the **built-in browser simulation engine** (${keyStatus}), which handles conversational coding, JEE math, admissions prep, and simulated MCP plugins offline.`,
           "",
-          "To unlock full open-ended cloud AI streaming on `gemini-3.8-flash`:",
+          "To unlock full open-ended cloud AI streaming on `gemini-2.0-flash`:",
           "1. Open **Settings** (gear icon in sidebar bottom)",
           "2. Paste your free key from [Google AI Studio](https://aistudio.google.com/app/apikey)",
           "3. Tap **Save & Apply** — every prompt will stream live tokens directly from Google's servers!",

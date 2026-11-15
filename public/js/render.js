@@ -2,6 +2,19 @@
 (function (root) {
   "use strict";
 
+  let streamMathRaf = null;
+  function scheduleStreamMath(container) {
+    if (typeof requestAnimationFrame !== "function") {
+      renderMath(container);
+      return;
+    }
+    if (streamMathRaf) cancelAnimationFrame(streamMathRaf);
+    streamMathRaf = requestAnimationFrame(() => {
+      renderMath(container);
+      streamMathRaf = null;
+    });
+  }
+
   function renderMath(container) {
     if (typeof renderMathInElement === "function" && container) {
       try {
@@ -299,10 +312,14 @@
       updateBody: function (markdownText) {
         bodyDiv.style.display = "block";
         bodyDiv.innerHTML = renderMarkdown(markdownText);
-        renderMath(bodyDiv);
+        scheduleStreamMath(bodyDiv);
       },
       finish: function () {
         clearInterval(timerInterval);
+        if (streamMathRaf) {
+          cancelAnimationFrame(streamMathRaf);
+          streamMathRaf = null;
+        }
         el.classList.remove("streaming");
         thinkingBlock.open = false;
         this.hideThinkingIfUnused();

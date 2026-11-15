@@ -38,8 +38,12 @@ async function fetchFromGist(gistId, token) {
   const data = await res.json();
   const raw = data?.files?.["antigravity-sessions.json"]?.content;
   if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  return Array.isArray(parsed) ? parsed : null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function saveToGist(gistId, token, sessions) {

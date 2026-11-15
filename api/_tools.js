@@ -160,6 +160,36 @@ async function runWebSearch({ query, limit = 6 }) {
   } catch (e) {}
 
   if (results.length === 0) {
+    // Fallback 1: Jina AI search reader (works reliably from cloud serverless environments)
+    try {
+      const jinaRes = await fetchWithTimeout(
+        `https://s.jina.ai/${encodeURIComponent(q)}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "Antigravity-Hub-Agent/1.0",
+          },
+          timeoutMs: 4500,
+        }
+      );
+      if (jinaRes.ok) {
+        const jJson = await jinaRes.json();
+        const dataArr = Array.isArray(jJson?.data) ? jJson.data : [];
+        for (const item of dataArr) {
+          if (results.length >= cap) break;
+          const title = String(item.title || "").trim();
+          const href = String(item.url || "").trim();
+          const snippet = stripTags(item.description || item.content || "").slice(0, 320);
+          if (title && href.startsWith("http")) {
+            results.push({ title, url: href, snippet });
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (results.length === 0) {
+    // Fallback 2: Wikipedia Knowledge API
     try {
       const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&srlimit=${cap}`;
       const wRes = await fetchWithTimeout(wikiUrl, {
@@ -440,6 +470,15 @@ async function runGithubCommitFile({ repo, path: filePath, content, message, bra
 function runJavascriptSandbox({ code }) {
   const source = String(code || "").trim();
   if (!source) return { error: "Code cannot be empty." };
+
+  // Static guard against obvious prototype escape and process probe strings
+  if (
+    /\b(process|require|child_process|fs|path|net|http|https|cluster|worker_threads)\b/i.test(source) &&
+    /(\.env|\.exit|\.kill|\.mainModule|\.binding|constructor\s*\[)/i.test(source)
+  ) {
+    return { ok: false, error: "Access to process, filesystem, and system modules is blocked.", logs: [] };
+  }
+
   const logs = [];
   const sandbox = {
     console: {
@@ -462,17 +501,24 @@ function runJavascriptSandbox({ code }) {
     parseFloat,
     isNaN,
     isFinite,
+    process: undefined,
+    require: undefined,
+    global: undefined,
   };
 
   try {
-    const context = vm.createContext(sandbox);
-    const wrapped = `(function(){ "use strict"; ${source} })()`;
+    const context = vm.createContext(sandbox, {
+      codeGeneration: { strings: false, wasm: false },
+    });
     let value;
     try {
-      value = vm.runInContext(wrapped, context, { timeout: 1500 });
+      // First attempt evaluating as an expression returning a value
+      const exprWrapped = `(function(){ "use strict"; const process = undefined, require = undefined; return (${source}); })()`;
+      value = vm.runInContext(exprWrapped, context, { timeout: 1500 });
     } catch (syntaxErr) {
-      // Fallback: if single expression (e.g., "Math.sqrt(2)"), evaluate directly
-      value = vm.runInContext(source, context, { timeout: 1500 });
+      // Fallback: evaluate as statement block
+      const blockWrapped = `(function(){ "use strict"; const process = undefined, require = undefined; ${source} })()`;
+      value = vm.runInContext(blockWrapped, context, { timeout: 1500 });
     }
     return {
       ok: true,
@@ -527,10 +573,12 @@ async function runArxivSearch({ query, maxResults = 5 }) {
 }
 
 async function runPubchemLookup({ compound }) {
-  const name = String(compound || "").trim();
+  const name = String(compound || "").trim().replace(/^cid:\s*/i, "");
   if (!name) return { error: "Compound name or CID is required." };
+  const isCid = /^\d+$/.test(name);
+  const pathPart = isCid ? `cid/${encodeURIComponent(name)}` : `name/${encodeURIComponent(name)}`;
   const res = await fetchWithTimeout(
-    `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(name)}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName/JSON`,
+    `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/${pathPart}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName/JSON`,
     { headers: { "User-Agent": "Antigravity-Hub-Agent/1.0" } }
   );
   if (!res.ok) return { error: `PubChem HTTP ${res.status} for "${name}"` };

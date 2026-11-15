@@ -3,15 +3,15 @@ const crypto = require("node:crypto");
 const { getToolDeclarations, executeToolCall } = require("./_tools.js");
 
 const MODEL_MIGRATION_MAP = {
-  "gemini-2.5-flash": "gemini-3.8-flash",
-  "gemini-2.0-flash": "gemini-3.8-flash",
-  "gemini-2.0-flash-thinking-exp": "gemini-3.8-flash",
-  "gemini-1.5-flash": "gemini-3.8-flash",
-  "gemini-1.5-pro": "gemini-4-argon",
-  "gemini-2.5-pro": "gemini-4-argon",
+  "gemini-2.5-flash": "gemini-2.0-flash",
+  "gemini-3.8-flash": "gemini-2.0-flash",
+  "gemini-3.5-flash": "gemini-2.0-flash",
+  "gemini-3.5-flash-lite": "gemini-2.0-flash",
+  "gemini-4-argon": "gemini-1.5-pro",
+  "gemini-2.5-pro": "gemini-1.5-pro",
 };
 
-const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
+const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 const RETRY_STATUSES = new Set([404, 429, 503]);
 const ALLOWED_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const overloadedModelUntil = new Map();
@@ -64,9 +64,8 @@ function verifyStudioPasscode(req) {
 }
 
 function resolveActiveModel(requested) {
-  const m = (requested || "gemini-3.8-flash").trim();
+  const m = (requested || "gemini-2.0-flash").trim();
   if (MODEL_MIGRATION_MAP[m]) return MODEL_MIGRATION_MAP[m];
-  if (m.startsWith("gemini-1.5") || m.startsWith("gemini-2.")) return "gemini-3.8-flash";
   return m;
 }
 
@@ -199,8 +198,8 @@ async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, sh
     }
     usedModel = orderedModels[i];
     const hasMore = i < orderedModels.length - 1;
-    const action = shouldStream ? "streamGenerateContent?alt=sse&" : "generateContent?";
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(usedModel)}:${action}key=${encodeURIComponent(activeKey)}`;
+    const action = shouldStream ? "streamGenerateContent?alt=sse" : "generateContent";
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(usedModel)}:${action}`;
 
     const controller = new AbortController();
     const onExternalAbort = () => controller.abort();
@@ -209,7 +208,10 @@ async function fetchGeminiWithFallback({ candidateModels, bodyObj, activeKey, sh
     try {
       lastRes = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": activeKey,
+        },
         body: payload,
         signal: controller.signal,
       });
@@ -310,7 +312,7 @@ module.exports = async function handler(req, res) {
         ok: true,
         preinstalledKey: Boolean(process.env.GEMINI_API_KEY),
         passcodeRequired: Boolean((process.env.STUDIO_PASSCODE || "").trim()),
-        defaultModel: "gemini-3.8-flash",
+        defaultModel: "gemini-2.0-flash",
         agenticTools: true,
       })
     );
@@ -421,16 +423,18 @@ module.exports = async function handler(req, res) {
     }
   };
 
+  const FUNCTION_DEADLINE_MS = 24_000;
+  const loopStartTime = Date.now();
+
   try {
     let finalNonStreamParts = [];
     let finalModelUsed = targetModel;
 
     for (let step = 0; step < maxSteps; step++) {
       if (clientAbort.signal.aborted) break;
-      const stepModels = stickyModel
-        ? [...new Set([stickyModel, ...candidateModels])]
-        : candidateModels;
-      const isFinalWrapStep = step === maxSteps - 1;
+      const elapsed = Date.now() - loopStartTime;
+      const timeRemaining = FUNCTION_DEADLINE_MS - elapsed;
+      const isFinalWrapStep = step === maxSteps - 1 || timeRemaining < 4500;
 
       const bodyObj = {
         contents: workingContents,

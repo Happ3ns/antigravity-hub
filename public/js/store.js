@@ -562,20 +562,21 @@
 
     getModel: function () {
       const saved = localStorage.getItem(STORAGE_KEYS.MODEL);
-      if (!saved) return "gemini-3.8-flash";
-      // Auto-migrate retired/deprecated model IDs to active Gemini 3.8 / 4 models
+      if (!saved) return "gemini-2.0-flash";
+      // Auto-migrate retired/speculative model IDs to active Google Gemini endpoints
       if (
+        saved === "gemini-3.8-flash" ||
+        saved === "gemini-3.5-flash" ||
+        saved === "gemini-3.5-flash-lite" ||
         saved === "gemini-2.5-flash" ||
-        saved === "gemini-2.0-flash" ||
-        saved === "gemini-2.0-flash-thinking-exp" ||
-        saved.startsWith("gemini-1.5")
+        saved === "gemini-2.0-flash-thinking-exp"
       ) {
-        localStorage.setItem(STORAGE_KEYS.MODEL, "gemini-3.8-flash");
-        return "gemini-3.8-flash";
+        localStorage.setItem(STORAGE_KEYS.MODEL, "gemini-2.0-flash");
+        return "gemini-2.0-flash";
       }
-      if (saved === "gemini-2.5-pro") {
-        localStorage.setItem(STORAGE_KEYS.MODEL, "gemini-4-argon");
-        return "gemini-4-argon";
+      if (saved === "gemini-2.5-pro" || saved === "gemini-4-argon") {
+        localStorage.setItem(STORAGE_KEYS.MODEL, "gemini-1.5-pro");
+        return "gemini-1.5-pro";
       }
       return saved;
     },
